@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ReadingProvider } from "@/lib/reading-settings";
+import ClientClerkProvider from "@/lib/clerk-client";
+import ToastProvider from "@/components/toast-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +32,12 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <ReadingProvider>{children}</ReadingProvider>
+        <ClientClerkProvider>
+          <ReadingProvider>
+            {children}
+            <ToastProvider />
+          </ReadingProvider>
+        </ClientClerkProvider>
       </body>
     </html>
   );

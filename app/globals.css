@@ -364,6 +364,57 @@ body {
   opacity: 1;
 }
 
+/* ASCII diagram blocks */
+.diagram-block {
+  margin-bottom: 1.25rem;
+  border-radius: 12px;
+  background: var(--blockquote-bg);
+  border: 1px solid var(--border-subtle);
+  padding: 1rem;
+  overflow-x: auto;
+}
+.diagram-pre {
+  margin: 0;
+  background: none;
+  padding: 0;
+  text-align: center;
+  line-height: 1.4;
+}
+.diagram-code {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
+/* ============ FLASHCARD 3D ============ */
+
+.perspective {
+  perspective: 1200px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preserve-3d {
+    transform-style: flat;
+  }
+  .rotate-y-180 {
+    transform: none;
+  }
+}
+
 /* Section transition divider */
 .chapter-divider {
   position: relative;

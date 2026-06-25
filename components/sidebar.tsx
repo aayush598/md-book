@@ -1,12 +1,15 @@
 "use client";
 
 import { BookChapter, normalizeName } from "@/lib/github";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getBookmarks, type Bookmark } from "@/lib/storage";
 
 interface SidebarProps {
   chapters: BookChapter[];
   currentFile: string | null;
   onFileSelect: (chapter: BookChapter, file: string) => void;
+  bookId?: string;
+  bookName?: string;
 }
 
 function ChapterIcon() {
@@ -25,6 +28,14 @@ function FileIcon() {
   );
 }
 
+function BookmarkIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--accent)" }}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+    </svg>
+  );
+}
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -37,7 +48,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export default function Sidebar({ chapters, currentFile, onFileSelect }: SidebarProps) {
+export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {};
     chapters.forEach((ch) => {
@@ -46,6 +57,14 @@ export default function Sidebar({ chapters, currentFile, onFileSelect }: Sidebar
     return state;
   });
   const [search, setSearch] = useState("");
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
+  useEffect(() => {
+    if (bookId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBookmarks(getBookmarks().filter((b) => b.bookId === bookId));
+    }
+  }, [bookId, currentFile]);
 
   const toggle = (path: string) => {
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
@@ -57,12 +76,15 @@ export default function Sidebar({ chapters, currentFile, onFileSelect }: Sidebar
     ch.files.some((f) => normalizeName(f.name).toLowerCase().includes(search.toLowerCase()))
   );
 
-  // Calculate max depth for indentation
   const maxDepth = Math.max(...chapters.map((c) => c.depth), 0);
+
+  const handleBookmarkClick = (filePath: string) => {
+    const chapter = chapters.find((ch) => ch.files.some((f) => f.path === filePath));
+    if (chapter) onFileSelect(chapter, filePath);
+  };
 
   return (
     <aside className="flex h-full flex-col" style={{ background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-subtle)" }}>
-      {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div
           className="flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm"
@@ -75,7 +97,6 @@ export default function Sidebar({ chapters, currentFile, onFileSelect }: Sidebar
         <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Chapters</span>
       </div>
 
-      {/* Search */}
       <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div className="relative">
           <svg
@@ -108,7 +129,44 @@ export default function Sidebar({ chapters, currentFile, onFileSelect }: Sidebar
         </div>
       </div>
 
-      {/* Chapter list */}
+      {/* Bookmarks section */}
+      {bookmarks.length > 0 && (
+        <div className="px-2 pt-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+            <BookmarkIcon />
+            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>
+              Bookmarks ({bookmarks.length})
+            </span>
+          </div>
+          <div className="ml-1 space-y-0.5">
+            {bookmarks.map((bm) => (
+              <button
+                key={bm.filePath}
+                onClick={() => handleBookmarkClick(bm.filePath)}
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-all"
+                style={{
+                  background: bm.filePath === currentFile ? "var(--accent-bg)" : "transparent",
+                  color: bm.filePath === currentFile ? "var(--accent)" : "var(--text-tertiary)",
+                  fontWeight: bm.filePath === currentFile ? 500 : 400,
+                }}
+                onMouseEnter={(e) => {
+                  if (bm.filePath !== currentFile) e.currentTarget.style.background = "var(--bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  if (bm.filePath !== currentFile) e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--accent)" }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+                </svg>
+                <span className="truncate">{bm.title}</span>
+              </button>
+            ))}
+          </div>
+          <div className="my-2 mx-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }} />
+        </div>
+      )}
+
       <nav className="flex-1 overflow-y-auto sidebar-scroll px-2 py-2">
         {filtered.map((chapter) => {
           const isExpanded = expanded[chapter.path] ?? true;

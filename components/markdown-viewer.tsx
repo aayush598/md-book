@@ -5,12 +5,40 @@ import remarkGfm from "remark-gfm";
 import { useState, useCallback } from "react";
 import type { Components } from "react-markdown";
 
+const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u25A0-\u25FF\u2190-\u21FF\u2080-\u2089\u25CB\u25A1\u25AA\u25AB\u25AC\u25AD]/;
+
+function isDiagram(text: string): boolean {
+  return BOX_DRAWING_RE.test(text);
+}
+
+function DiagramBlock({ children }: any) {
+  return (
+    <div className="diagram-block">
+      <pre className="diagram-pre">
+        <code className="diagram-code">
+          {children}
+        </code>
+      </pre>
+    </div>
+  );
+}
+
 function CodeBlock({ className, children, ...props }: any) {
+  const text = String(children);
+
+  if (isDiagram(text)) {
+    return <DiagramBlock>{children}</DiagramBlock>;
+  }
+
+  return <CodeBlockInner className={className} {...props}>{children}</CodeBlockInner>;
+}
+
+function CodeBlockInner({ className, children, ...props }: any) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    const text = String(children).replace(/\n$/, "");
-    navigator.clipboard.writeText(text).then(() => {
+    const t = String(children).replace(/\n$/, "");
+    navigator.clipboard.writeText(t).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });

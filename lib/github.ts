@@ -22,7 +22,7 @@ export interface Book {
   chapters: BookChapter[];
 }
 
-interface BookConfig {
+export interface BookConfig {
   owner: string;
   repo: string;
   branch: string;
@@ -67,18 +67,18 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
   const data = await res.json();
   const items: GitTreeItem[] = data.tree;
 
-  const bookPrefix = config.path + "/";
+  const bookPrefix = config.path ? config.path + "/" : "";
 
   // Collect all markdown files under the book path
   const mdFiles = items.filter(
-    (item) => item.type === "blob" && item.path.startsWith(bookPrefix) && item.path.endsWith(".md")
+    (item) => item.type === "blob" && (config.path ? item.path.startsWith(bookPrefix) : true) && item.path.endsWith(".md")
   );
 
   // Group files by their parent directory path
   const chapterMap = new Map<string, { dirPath: string; files: RepoFile[] }>();
 
   for (const file of mdFiles) {
-    const relativePath = file.path.slice(bookPrefix.length);
+    const relativePath = config.path ? file.path.slice(bookPrefix.length) : file.path;
     const parts = relativePath.split("/");
     const fileName = parts.pop()!;
     const dirPath = parts.join("/");
@@ -97,7 +97,7 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
   const chapterList: BookChapter[] = [];
 
   for (const [, { dirPath, files }] of chapterMap) {
-    const relativeDir = dirPath.slice(bookPrefix.length);
+    const relativeDir = config.path ? dirPath.slice(bookPrefix.length) : dirPath;
     const parts = relativeDir.split("/");
     const shortName = parts[parts.length - 1] || "";
     const displayName = parts
