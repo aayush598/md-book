@@ -1,0 +1,156 @@
+export interface RepoFile {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+}
+
+export interface BookChapter {
+  name: string;
+  shortName: string;
+  path: string;
+  files: RepoFile[];
+  depth: number;
+}
+
+export interface Book {
+  id: string;
+  name: string;
+  repo: string;
+  owner: string;
+  branch: string;
+  path: string;
+  chapters: BookChapter[];
+}
+
+interface BookConfig {
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  name: string;
+  id: string;
+}
+
+const BOOKS_CONFIG: BookConfig[] = [
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "samora-ai",
+    name: "Samora AI",
+    id: "samora-ai",
+  },
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "subject/os",
+    name: "Operating Systems",
+    id: "os",
+  },
+];
+
+interface GitTreeItem {
+  path: string;
+  mode: string;
+  type: "tree" | "blob";
+  sha: string;
+  size?: number;
+}
+
+export async function getBookTree(config: BookConfig): Promise<Book> {
+  const url = `https://api.github.com/repos/${config.owner}/${config.repo}/git/trees/${config.branch}?recursive=1`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/vnd.github.v3+json" },
+  });
+  if (!res.ok) throw new Error(`Failed to fetch repo tree: ${res.status}`);
+  const data = await res.json();
+  const items: GitTreeItem[] = data.tree;
+
+  const bookPrefix = config.path + "/";
+
+  // Collect all markdown files under the book path
+  const mdFiles = items.filter(
+    (item) => item.type === "blob" && item.path.startsWith(bookPrefix) && item.path.endsWith(".md")
+  );
+
+  // Group files by their parent directory path
+  const chapterMap = new Map<string, { dirPath: string; files: RepoFile[] }>();
+
+  for (const file of mdFiles) {
+    const relativePath = file.path.slice(bookPrefix.length);
+    const parts = relativePath.split("/");
+    const fileName = parts.pop()!;
+    const dirPath = parts.join("/");
+    const fullDirPath = file.path.slice(0, file.path.lastIndexOf("/"));
+
+    if (!chapterMap.has(fullDirPath)) {
+      chapterMap.set(fullDirPath, { dirPath: fullDirPath, files: [] });
+    }
+    chapterMap.get(fullDirPath)!.files.push({
+      name: fileName,
+      path: file.path,
+      type: "file",
+    });
+  }
+
+  const chapterList: BookChapter[] = [];
+
+  for (const [, { dirPath, files }] of chapterMap) {
+    const relativeDir = dirPath.slice(bookPrefix.length);
+    const parts = relativeDir.split("/");
+    const shortName = parts[parts.length - 1] || "";
+    const displayName = parts
+      .map((p) => p.replace(/^[\d-]+/, "").replace(/[-_]/g, " ").trim())
+      .filter(Boolean)
+      .join(" / ");
+    const finalName = displayName || shortName.replace(/[-_]/g, " ").trim();
+
+    // Sort files by name
+    files.sort((a, b) => a.name.localeCompare(b.name));
+
+    chapterList.push({
+      name: finalName,
+      shortName: shortName.replace(/[-_]/g, " ").trim(),
+      path: dirPath,
+      files,
+      depth: parts.length,
+    });
+  }
+
+  // Sort chapters in depth-first order (parent dirs before children, siblings by name)
+  chapterList.sort((a, b) => a.path.localeCompare(b.path));
+
+  return {
+    id: config.id,
+    name: config.name,
+    repo: config.repo,
+    owner: config.owner,
+    branch: config.branch,
+    path: config.path,
+    chapters: chapterList,
+  };
+}
+
+export async function fetchFileContent(config: BookConfig, path: string): Promise<string> {
+  const url = `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${path}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch file ${path}: ${res.status}`);
+  return res.text();
+}
+
+export function getBookConfig(bookId: string): BookConfig | undefined {
+  return BOOKS_CONFIG.find((b) => b.id === bookId);
+}
+
+export function getAllBookConfigs(): BookConfig[] {
+  return [...BOOKS_CONFIG];
+}
+
+export function normalizeName(name: string): string {
+  return name
+    .replace(/^[\d-]+/, "")
+    .replace(/[-_]/g, " ")
+    .replace(/\.md$/i, "")
+    .trim();
+}
