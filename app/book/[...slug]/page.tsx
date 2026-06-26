@@ -531,6 +531,8 @@ export default function BookPage() {
             bookId={bookId || ""}
             onClose={() => setFlashcardMode(false)}
             initialView={flashcardInitialView}
+            config={config || undefined}
+            allFilePaths={allFiles.map((f) => f.path)}
           />
         ) : (
           <main ref={mainRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" style={{ background: "transparent" }} tabIndex={0}>

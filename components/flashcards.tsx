@@ -5,6 +5,8 @@ import { parseFlashcardsFromFiles } from "@/lib/flashcards";
 import { useAuth } from "@/lib/stores/auth-store";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
+import { fetchFileContent, type BookConfig } from "@/lib/github";
+import ChatPanel from "@/components/chat-panel";
 import toast from "react-hot-toast";
 
 class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -37,6 +39,8 @@ interface FlashcardsProps {
   onClose: () => void;
   bookId?: string;
   initialView?: "cards" | "dashboard";
+  config?: BookConfig;
+  allFilePaths?: string[];
 }
 
 type StudyMode = "sequential" | "random";
@@ -46,10 +50,10 @@ interface DayData {
   count: number;
 }
 
-function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initialView = "cards" }: FlashcardsProps) {
+function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initialView = "cards", config, allFilePaths }: FlashcardsProps) {
   const { userId, isSignedIn } = useAuth();
   const store = useFlashcardStore();
-  const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
+  const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted);
   const [mode, setMode] = useState<StudyMode>("random");
   const [flipped, setFlipped] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -58,13 +62,85 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const [stats, setStats] = useState({ totalPoints: 0, longestStreak: 0, currentStreak: 0, totalCardsReviewed: 0 });
   const [contributions, setContributions] = useState<DayData[]>([]);
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [swiping, setSwiping] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const [allFileContents, setAllFileContents] = useState<{ path: string; content: string }[] | null>(null);
+  const [allLoading, setAllLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const allFileCache = useRef<{ path: string; content: string }[] | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const scopeRef = useRef(store.scope);
+  scopeRef.current = store.scope;
+
+  // Fetch content for all files when scope is "all"
+  useEffect(() => {
+    if (store.scope !== "all") return;
+    if (!config || !allFilePaths || allFilePaths.length === 0) return;
+
+    // Use cached content across scope toggles
+    if (allFileCache.current) {
+      setAllFileContents(allFileCache.current);
+      return;
+    }
+
+    const loadedPaths = new Set(files.map((f) => f.path));
+    const missing = allFilePaths.filter((p) => !loadedPaths.has(p));
+    if (missing.length === 0) {
+      allFileCache.current = files;
+      setAllFileContents(files);
+      return;
+    }
+
+    // Abort any previous in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setAllLoading(true);
+    setFetchError(null);
+
+    const CONCURRENCY = 5;
+    const total = missing.length;
+    const allFetched: { path: string; content: string }[] = [];
+    let cursor = 0;
+
+    async function fetchBatch(): Promise<void> {
+      while (cursor < total && !controller.signal.aborted) {
+        const batch = missing.slice(cursor, cursor + CONCURRENCY);
+        cursor += CONCURRENCY;
+        const results = await Promise.all(
+          batch.map((p) => fetchFileContent(config!, p).then((c) => ({ path: p, content: c })))
+        );
+        if (controller.signal.aborted) return;
+        allFetched.push(...results);
+        // Progressive update — show cards as batches arrive
+        const combined = [...files, ...allFetched];
+        setAllFileContents(combined);
+      }
+    }
+
+    fetchBatch()
+      .then(() => {
+        if (controller.signal.aborted) return;
+        const combined = [...files, ...allFetched];
+        allFileCache.current = combined;
+        setAllFileContents(combined);
+        setAllLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) return;
+        setFetchError((e as Error).message);
+        setAllLoading(false);
+      });
+  }, [store.scope, config, allFilePaths, files]);
+
+  const parsedSource = store.scope === "all" ? allFileContents || files : files;
 
   const allCards = useMemo(
-    () => parseFlashcardsFromFiles(files, "current", currentPath || undefined),
-    [files, currentPath]
+    () => parseFlashcardsFromFiles(parsedSource, store.scope, currentPath || undefined),
+    [parsedSource, store.scope, currentPath]
   );
 
   const availableCards = useMemo(() => {
@@ -72,7 +148,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     return allCards.filter((c) => !reviewedIds.has(c.id));
   }, [allCards, store.allowRepeat, reviewedIds]);
 
-  const [shuffledSeed, setShuffledSeed] = useState(0);
+  const [shuffledSeed, setShuffledSeed] = useState(() => Math.floor(Math.random() * 233280));
   const orderedCards = useMemo(() => {
     if (mode === "random") {
       const arr = [...availableCards];
@@ -141,12 +217,13 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     if (currentIdx < totalCards - 1) {
       setCurrentIdx((p) => p + 1);
       setFlipped(false);
+      setChatOpen(false);
     }
   }, [current, currentIdx, totalCards, reviewedIds, recordReview, fetchStats, store]);
 
   const handlePrev = useCallback(() => {
     playPrevSound();
-    if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); }
+    if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); setChatOpen(false); }
   }, [currentIdx]);
 
   const handleFlip = useCallback(() => {
@@ -345,7 +422,8 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   }
 
   return (
-    <div className="flex flex-col h-full" onKeyDown={handleKeyDown} tabIndex={0}>
+    <div className="flex h-full" onKeyDown={handleKeyDown} tabIndex={0}>
+      <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div className="flex items-center gap-3">
@@ -377,8 +455,16 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
       {/* Controls bar */}
       <div className="flex items-center gap-4 px-6 py-2.5 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-sidebar)" }}>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>File</span>
-          <span className="rounded-lg px-2.5 py-1 text-[11px] font-medium" style={{ background: "var(--accent-bg)", color: "var(--accent)" }}>Current file</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Scope</span>
+          {(["current", "all"] as const).map((s) => (
+            <button key={s} onClick={() => { store.setScope(s); }}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${store.scope === s ? "shadow-sm" : ""}`}
+              style={{ background: store.scope === s ? "var(--accent-bg)" : "var(--bg-hover)", color: store.scope === s ? "var(--accent)" : "var(--text-tertiary)" }}>
+              {s === "current" ? "Current file" : "All files"}
+            </button>
+          ))}
+          {allLoading && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{allFileContents ? allFileContents.length : 0}/{allFilePaths?.length || 0} files...</span>}
+          {fetchError && <span className="text-[11px]" style={{ color: "#ef4444" }}>{fetchError}</span>}
         </div>
         <div className="w-px h-5" style={{ background: "var(--border-subtle)" }} />
         <div className="flex items-center gap-2">
@@ -436,7 +522,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
               </svg>
             </div>
             <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>No flashcards found</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-tertiary)" }}>This file doesn&apos;t contain Q&A content in the required format.</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-tertiary)" }}>No Q&A content found{store.scope === "current" ? " in this file. Try switching scope to \"All files\"." : "."}</p>
           </div>
         </div>
       ) : current ? (
@@ -478,8 +564,19 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     style={{ background: current.difficulty === "hard" ? "rgba(239,68,68,0.1)" : current.difficulty === "medium" ? "rgba(234,179,8,0.1)" : "rgba(34,197,94,0.1)", color: current.difficulty === "hard" ? "#ef4444" : current.difficulty === "medium" ? "#eab308" : "#22c55e" }}>
                     {current.difficulty}
                   </span>
-                  {current.source && <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{current.source.split("/").pop()}</span>}
-                  <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tap to reveal</span>
+                  {current.source && <span className="text-[10px] truncate max-w-[120px]" style={{ color: "var(--text-muted)" }} title={current.source}>{current.source}</span>}
+                  <button onClick={(e) => { e.stopPropagation(); setChatOpen(true); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: chatOpen ? "var(--accent)" : "var(--text-muted)" }} title="Ask AI">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                    </svg>
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="flex-1 flex items-center justify-center">
                   <p className="text-lg font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>{current.question}</p>
@@ -492,7 +589,12 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
                   </svg>
                   <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
-                  <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>Tap to flip back</span>
+                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
+                    className="ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{current.answer}</div>
@@ -552,6 +654,22 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
               </button>
             )}
           </div>
+        </div>
+      )}
+      </div>
+      {chatOpen && current && (
+        <div className="w-80 flex-shrink-0 flex flex-row">
+          <button
+            onClick={() => setChatOpen(false)}
+            className="flex items-center justify-center w-6 self-stretch cursor-pointer transition-colors"
+            style={{ background: "var(--bg-page)", borderLeft: "1px solid var(--border-subtle)", color: "var(--text-tertiary)" }}
+            title="Close sidebar"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <ChatPanel question={current.question} answer={current.answer} source={current.source} bookName={bookName} onClose={() => setChatOpen(false)} />
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ interface FlashcardState {
   currentIndex: number;
   flipped: boolean;
   mode: "sequential" | "random";
+  scope: "current" | "all";
   allowRepeat: boolean;
   autoFlip: boolean;
   sessionCards: number;
@@ -13,6 +14,7 @@ interface FlashcardState {
   setCurrentIndex: (i: number) => void;
   setFlipped: (f: boolean) => void;
   setMode: (m: "sequential" | "random") => void;
+  setScope: (s: "current" | "all") => void;
   setAllowRepeat: (r: boolean) => void;
   setAutoFlip: (a: boolean) => void;
   incrementSession: () => void;
@@ -24,6 +26,7 @@ export const useFlashcardStore = create<FlashcardState>((set) => ({
   currentIndex: 0,
   flipped: false,
   mode: "random",
+  scope: "current",
   allowRepeat: true,
   autoFlip: false,
   sessionCards: 0,
@@ -31,6 +34,7 @@ export const useFlashcardStore = create<FlashcardState>((set) => ({
   setCurrentIndex: (currentIndex) => set({ currentIndex, flipped: false }),
   setFlipped: (flipped) => set({ flipped }),
   setMode: (mode) => set({ mode, currentIndex: 0, flipped: false }),
+  setScope: (scope) => set({ scope, currentIndex: 0, flipped: false }),
   setAllowRepeat: (allowRepeat) => set({ allowRepeat, currentIndex: 0, flipped: false }),
   setAutoFlip: (autoFlip) => set({ autoFlip }),
   incrementSession: () => set((s) => ({ sessionCards: s.sessionCards + 1 })),
