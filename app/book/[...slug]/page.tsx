@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Book, getBookConfig, getBookTree, fetchFileContent, normalizeName, type BookConfig } from "@/lib/github";
-import { useReadingSettings, type FontSize } from "@/lib/reading-settings";
+import { useReadingSettings } from "@/lib/reading-settings";
 import {
   parseBookSlug, isBookmarked, addBookmark, removeBookmark,
   getReadingProgress, saveReadingProgress,
@@ -14,6 +14,8 @@ import MarkdownViewer from "@/components/markdown-viewer";
 import ReadingControls from "@/components/reading-controls";
 import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
+import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
+import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 
 interface LoadedFile {
   path: string;
@@ -39,7 +41,9 @@ export default function BookPage() {
   const [readingTime, setReadingTime] = useState(0);
   const [initialLoad, setInitialLoad] = useState(true);
 
-  const { fontSize, lineHeight, readingMode, sidebarPinned, setSidebarPinned } = useReadingSettings();
+  const { fontSize, lineHeight, readingMode, sidebarPinned, setSidebarPinned, getFontSizePx } = useReadingSettings();
+  const { isSignedIn } = useAuth();
+  const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
 
   const [book, setBook] = useState<Book | null>(null);
   const [bookLoading, setBookLoading] = useState(true);
@@ -260,6 +264,7 @@ export default function BookPage() {
 
   const bookmarkActive = bookId && anchorFile ? isBookmarked(bookId, anchorFile) : false;
   const [flashcardMode, setFlashcardMode] = useState(false);
+  const [flashcardInitialView, setFlashcardInitialView] = useState<"cards" | "dashboard">("cards");
 
   const toggleBookmark = useCallback(() => {
     if (!bookId || !anchorFile || !book) return;
@@ -277,10 +282,6 @@ export default function BookPage() {
     // Force re-render
     setAnchorFile((prev) => prev);
   }, [bookId, anchorFile, book, bookmarkActive]);
-
-  const fontSizeClass: Record<FontSize, string> = {
-    sm: "text-[0.9375rem]", base: "text-[1.0625rem]", lg: "text-[1.1875rem]", xl: "text-[1.375rem]", "2xl": "text-[1.5rem]",
-  };
 
   if (!config) {
     return (
@@ -365,10 +366,23 @@ export default function BookPage() {
             <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{book.name}</span>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
+            {/* Dashboard */}
+            <button
+              onClick={() => { setFlashcardInitialView("dashboard"); setFlashcardMode(true); }}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
+              style={{ color: "var(--accent)", background: "var(--accent-bg)" }}
+              title="Flashcard Dashboard"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+              Dashboard
+            </button>
+
             {/* Flashcard mode */}
             <button
-              onClick={() => setFlashcardMode(!flashcardMode)}
+              onClick={() => { setFlashcardInitialView("cards"); setFlashcardMode(!flashcardMode); }}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
               style={{
                 color: flashcardMode ? "var(--accent)" : "var(--text-tertiary)",
@@ -440,6 +454,49 @@ export default function BookPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
             </button>
+
+            {/* Sound toggle */}
+            <button
+              onClick={toggleSound}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{ color: "var(--text-tertiary)" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+              title={soundMuted ? "Unmute sounds" : "Mute sounds"}
+            >
+              {soundMuted ? (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              )}
+            </button>
+
+            {/* Auth buttons */}
+            <div className="flex items-center gap-1.5 ml-1">
+              {isSignedIn ? (
+                <UserButton afterSignOutUrl="/" />
+              ) : (
+                <>
+                  <SignInButton mode="modal">
+                    <button className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
+                      style={{ color: "var(--accent)", background: "var(--accent-bg)" }}>
+                      Sign in
+                    </button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <button className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
+                      style={{ color: "white", background: "linear-gradient(135deg, var(--accent), var(--accent-soft))" }}>
+                      Sign up
+                    </button>
+                  </SignUpButton>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -473,6 +530,7 @@ export default function BookPage() {
             bookName={book.name}
             bookId={bookId || ""}
             onClose={() => setFlashcardMode(false)}
+            initialView={flashcardInitialView}
           />
         ) : (
           <main ref={mainRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" style={{ background: "transparent" }} tabIndex={0}>
@@ -497,7 +555,7 @@ export default function BookPage() {
                       )}
                     </div>
 
-                    <div className={`${fontSizeClass[fontSize]} transition-all duration-300`} style={{ lineHeight }}>
+                    <div style={{ "--reader-font-size": getFontSizePx(), "--reader-line-height": lineHeight } as React.CSSProperties}>
                       <MarkdownViewer content={file.content} enableDropcap={isFirst} />
                     </div>
 

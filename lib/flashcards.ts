@@ -14,7 +14,7 @@ function stripMD(text: string): string {
     .replace(/__(.*?)__/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/^["\u201c\u201d](.*)["\u201c\u201d]\s*$/gm, "$1")
-    .replace(/^###?\s+Q:\s*/gm, "")
+    .replace(/^#{2,3}\s+Q\d*\s*[:\.\)]\s*/gm, "")
     .trim();
 }
 
@@ -23,6 +23,7 @@ function cleanAnswerLine(line: string): string {
     .replace(/^\*\*A:\*\*\s*/, "")
     .replace(/^\*\*(Answer|Walk through|Talk about|Trade-offs|Response|Solution)\*\*:\s*$/i, "")
     .replace(/^\*\*(Answer|Walk through|Talk about|Trade-offs|Response|Solution)\*\*:\s*/i, "")
+    .replace(/^\*\*(Answer|Walk through|Talk about|Trade-offs|Response|Solution):\*\*\s*/i, "")
     .replace(/^A:\s*/i, "")
     .trim();
   return s;
@@ -38,10 +39,8 @@ function extractAnswerBlock(src: string, startIdx: number): string {
     const trimmed = line.trim();
 
     // Stop at next question or section header
-    if (/^#{1,3}\s/.test(trimmed) && !/^###?\s+Q:\s/i.test(trimmed)) break;
-    if (/^##\s+Q\d*\s*[:\.\)]\s/i.test(trimmed)) break;
+    if (/^#{1,3}\s/.test(trimmed)) break;
     if (/^\*\*Q\d*:/i.test(trimmed)) break;
-    if (/^###\s+Q:\s+"/i.test(trimmed)) break;
 
     // Stop at horizontal rules that separate sections
     if (/^---$/.test(trimmed)) { block.push(""); continue; }
@@ -55,6 +54,8 @@ function extractAnswerBlock(src: string, startIdx: number): string {
         } else if (trimmed === "") {
           continue;
         } else if (/^\*\*(Answer|Walk through|Talk about|Trade-offs|Response|Solution)\*\*:\s*$/i.test(line)) {
+          continue;
+        } else if (/^\*\*(Answer|Walk through|Talk about|Trade-offs|Response|Solution):\*\*\s*$/i.test(line)) {
           continue;
         } else if (/^A:\s*$/i.test(trimmed) || /^\*\*A:\*\*\s*$/.test(line)) {
           continue;
@@ -72,8 +73,8 @@ function extractAnswerBlock(src: string, startIdx: number): string {
   return stripMD(block.join("\n"));
 }
 
-// Format A: ## Q1: <question>\n**A:** <answer>
-const FORMAT_A = /^##\s+Q(\d*)\s*[:\.\)]\s+(.+?)$/gm;
+// Format A: ## Q1: <question>  or  ### Q1: <question>\n**A:** <answer>
+const FORMAT_A = /^#{2,3}\s+Q(\d*)\s*[:\.\)]\s+(.+?)$/gm;
 
 // Format B: **Q1: <question>**\nA: <answer>
 const FORMAT_B = /^\*\*Q(\d*):\s*(.+?)\*\*$/gm;
@@ -137,10 +138,10 @@ export function parseFlashcards(content: string, source?: string): Flashcard[] {
 
   if (/^###\s+Q:\s+"/m.test(head)) {
     tryFormatC();
+  } else if (/^#{2,3}\s+Q\d*\s*[:\.\)]/m.test(head)) {
+    tryFormatA();
   } else if (/^\*\*Q\d*:/m.test(head)) {
     tryFormatB();
-  } else if (/^##\s+Q\d*\s*[:\.\)]/m.test(head)) {
-    tryFormatA();
   } else {
     tryFormatA();
     tryFormatB();

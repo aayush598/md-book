@@ -1,9 +1,10 @@
 "use client";
 
-import { Component, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { Component, useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { parseFlashcardsFromFiles } from "@/lib/flashcards";
 import { useAuth } from "@/lib/stores/auth-store";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
+import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import toast from "react-hot-toast";
 
 class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -35,6 +36,7 @@ interface FlashcardsProps {
   bookName?: string;
   onClose: () => void;
   bookId?: string;
+  initialView?: "cards" | "dashboard";
 }
 
 type StudyMode = "sequential" | "random";
@@ -44,17 +46,21 @@ interface DayData {
   count: number;
 }
 
-function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: FlashcardsProps) {
+function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initialView = "cards" }: FlashcardsProps) {
   const { userId, isSignedIn } = useAuth();
   const store = useFlashcardStore();
+  const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
   const [mode, setMode] = useState<StudyMode>("random");
   const [flipped, setFlipped] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
-  const [showDashboard, setShowDashboard] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(initialView === "dashboard");
   const [stats, setStats] = useState({ totalPoints: 0, longestStreak: 0, currentStreak: 0, totalCardsReviewed: 0 });
   const [contributions, setContributions] = useState<DayData[]>([]);
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [swiping, setSwiping] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const allCards = useMemo(
     () => parseFlashcardsFromFiles(files, "current", currentPath || undefined),
@@ -125,6 +131,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
   }, [isSignedIn, userId, bookId]);
 
   const handleNext = useCallback(() => {
+    playNextSound();
     if (current && !reviewedIds.has(current.id)) {
       setReviewedIds((prev) => { const n = new Set(prev); n.add(current.id); return n; });
       store.incrementSession();
@@ -138,17 +145,24 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
   }, [current, currentIdx, totalCards, reviewedIds, recordReview, fetchStats, store]);
 
   const handlePrev = useCallback(() => {
+    playPrevSound();
     if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); }
   }, [currentIdx]);
 
-  const handleFlip = useCallback(() => setFlipped((p) => !p), []);
+  const handleFlip = useCallback(() => {
+    playFlipSound();
+    setFlipped((p) => !p);
+  }, []);
+
+  const handleNextRef = useRef(handleNext);
+  handleNextRef.current = handleNext;
 
   useEffect(() => {
     if (store.autoFlip && flipped) {
-      autoFlipTimer.current = setTimeout(handleNext, 3000);
+      autoFlipTimer.current = setTimeout(() => handleNextRef.current(), 3000);
       return () => { if (autoFlipTimer.current) clearTimeout(autoFlipTimer.current); };
     }
-  }, [store.autoFlip, flipped, currentIdx, handleNext]);
+  }, [store.autoFlip, flipped]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === " " || e.key === "Enter") { e.preventDefault(); handleFlip(); }
@@ -156,6 +170,33 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
     else if (e.key === "ArrowLeft" || e.key === "p") handlePrev();
     else if (e.key === "d") setShowDashboard((p) => !p);
   }, [handleFlip, handleNext, handlePrev]);
+
+  const SWIPE_THRESHOLD = 60;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    setSwiping(true);
+    setSwipeOffset(0);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!swipeStart.current) return;
+    const dx = e.touches[0].clientX - swipeStart.current.x;
+    setSwipeOffset(dx);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!swipeStart.current) return;
+    const dx = e.changedTouches[0].clientX - swipeStart.current.x;
+    const dy = e.changedTouches[0].clientY - swipeStart.current.y;
+    setSwiping(false);
+    setSwipeOffset(0);
+    swipeStart.current = null;
+    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx > 0) handlePrev();
+      else handleNext();
+    }
+  }, [handleNext, handlePrev]);
 
   const reshuffle = useCallback(() => {
     setShuffledSeed(Math.floor(Math.random() * 100000));
@@ -368,6 +409,21 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
             Reshuffle
           </button>
         )}
+        <button onClick={toggleSound} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all"
+          style={{ color: soundMuted ? "var(--text-muted)" : "var(--accent)", background: "var(--bg-hover)" }}
+          title={soundMuted ? "Unmute sounds" : "Mute sounds"}>
+          {soundMuted ? (
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+          ) : (
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            </svg>
+          )}
+          <span>{soundMuted ? "Muted" : "Sound"}</span>
+        </button>
       </div>
 
       {/* Main content area */}
@@ -395,8 +451,26 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
             </div>
           </div>
 
-          <div className="w-full max-w-lg perspective cursor-pointer" onClick={handleFlip}>
-            <div className={`relative w-full min-h-[280px] transition-transform duration-500 preserve-3d ${flipped ? "rotate-y-180" : ""}`} style={{ transformStyle: "preserve-3d" }}>
+          <div className="w-full max-w-lg perspective cursor-pointer select-none" onClick={handleFlip}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}>
+            <div className={`relative w-full min-h-[280px] transition-transform duration-500 preserve-3d ${flipped ? "rotate-y-180" : ""}`}
+              style={{
+                transformStyle: "preserve-3d",
+                ...(swiping ? { transition: "none", transform: `translateX(${swipeOffset}px) rotateY(${flipped ? 180 : 0}deg)` } : {}),
+              }}>
+              {swiping && (
+                <div className="absolute inset-y-0 flex items-center z-10 pointer-events-none"
+                  style={{ [swipeOffset > 0 ? "left" : "right"]: 12, opacity: Math.min(1, Math.abs(swipeOffset) / SWIPE_THRESHOLD) }}>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--text-muted)" }}>
+                    {swipeOffset > 0
+                      ? <><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></>
+                      : <><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></>
+                    }
+                  </svg>
+                </div>
+              )}
               <div className="absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col shadow-sm border"
                 style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
                 <div className="flex items-center gap-2 mb-4">
@@ -457,6 +531,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId }: Flas
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>Space</kbd> flip</span>
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>←</kbd> <kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>→</kbd> navigate</span>
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>D</kbd> dashboard</span>
+            <span>Swipe ← →</span>
           </div>
         </div>
       ) : (

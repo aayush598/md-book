@@ -1,7 +1,7 @@
 "use client";
 
 import { BookChapter, normalizeName } from "@/lib/github";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getBookmarks, type Bookmark } from "@/lib/storage";
 
 interface SidebarProps {
@@ -10,6 +10,11 @@ interface SidebarProps {
   onFileSelect: (chapter: BookChapter, file: string) => void;
   bookId?: string;
   bookName?: string;
+}
+
+interface TreeNode {
+  chapter: BookChapter;
+  children: TreeNode[];
 }
 
 function ChapterIcon() {
@@ -48,20 +53,150 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+function DotIcon() {
+  return (
+    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--text-muted)" }}>
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function buildTree(chapters: BookChapter[]): TreeNode[] {
+  const roots: TreeNode[] = [];
+  const map = new Map<string, TreeNode>();
+  for (const ch of chapters) {
+    map.set(ch.path, { chapter: ch, children: [] });
+  }
+  for (const ch of chapters) {
+    const node = map.get(ch.path)!;
+    const sep = ch.path.lastIndexOf("/");
+    if (sep > 0) {
+      const parentPath = ch.path.slice(0, sep);
+      const parent = map.get(parentPath);
+      if (parent) {
+        parent.children.push(node);
+        continue;
+      }
+    }
+    roots.push(node);
+  }
+  return roots;
+}
+
+function fileBelongsToChapter(chapterPath: string, filePath: string): boolean {
+  return filePath.startsWith(chapterPath + "/") || filePath.startsWith(chapterPath);
+}
+
+function findActiveChapterPath(tree: TreeNode[], currentFile: string | null): string | null {
+  if (!currentFile) return null;
+  for (const node of tree) {
+    if (node.chapter.files.some((f) => f.path === currentFile)) return node.chapter.path;
+    if (fileBelongsToChapter(node.chapter.path, currentFile)) return node.chapter.path;
+    const child = findActiveChapterPath(node.children, currentFile);
+    if (child) return child;
+  }
+  return null;
+}
+
+function TreeNodeComponent({
+  node, depth, currentFile, onFileSelect, expanded, onToggle, activePath,
+}: {
+  node: TreeNode;
+  depth: number;
+  currentFile: string | null;
+  onFileSelect: (chapter: BookChapter, file: string) => void;
+  expanded: Record<string, boolean>;
+  onToggle: (path: string) => void;
+  activePath: string | null;
+}) {
+  const isExpanded = expanded[node.chapter.path] ?? false;
+  const chapterActive = node.chapter.files.some((f) => f.path === currentFile) || activePath === node.chapter.path;
+  const hasChildren = node.children.length > 0;
+  const indent = depth * 8;
+
+  return (
+    <div className="mb-0.5">
+      <button
+        onClick={() => onToggle(node.chapter.path)}
+        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-all"
+        style={{
+          paddingLeft: `${8 + indent}px`,
+          background: chapterActive ? "var(--bg-active)" : "transparent",
+          color: chapterActive ? "var(--accent)" : "var(--text-tertiary)",
+        }}
+        onMouseEnter={(e) => { if (!chapterActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+        onMouseLeave={(e) => { if (!chapterActive) e.currentTarget.style.background = "transparent"; }}
+      >
+        <Chevron open={isExpanded} />
+        <ChapterIcon />
+        <span className="truncate flex-1">{node.chapter.name}</span>
+        <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+          {node.chapter.files.length}
+        </span>
+      </button>
+
+      {isExpanded && (
+        <div className="ml-3 mt-0.5 space-y-0.5" style={{ borderLeft: "1px solid var(--border-subtle)" }}>
+          {hasChildren && node.children.map((child) => (
+            <TreeNodeComponent
+              key={child.chapter.path}
+              node={child}
+              depth={depth + 1}
+              currentFile={currentFile}
+              onFileSelect={onFileSelect}
+              expanded={expanded}
+              onToggle={onToggle}
+              activePath={activePath}
+            />
+          ))}
+          {node.chapter.files.map((file) => {
+            const isFileActive = file.path === currentFile;
+            return (
+              <button
+                key={file.path}
+                onClick={() => onFileSelect(node.chapter, file.path)}
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-all"
+                style={{
+                  paddingLeft: `${16 + indent + (hasChildren ? 0 : 8)}px`,
+                  background: isFileActive ? "var(--accent-bg)" : "transparent",
+                  color: isFileActive ? "var(--accent)" : "var(--text-tertiary)",
+                  fontWeight: isFileActive ? 500 : 400,
+                }}
+                onMouseEnter={(e) => { if (!isFileActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                onMouseLeave={(e) => { if (!isFileActive) e.currentTarget.style.background = "transparent"; }}
+              >
+                {hasChildren ? <FileIcon /> : <DotIcon />}
+                <span className="truncate">{normalizeName(file.name)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }: SidebarProps) {
+  const tree = useMemo(() => buildTree(chapters), [chapters]);
+  const activePath = useMemo(() => findActiveChapterPath(tree, currentFile), [tree, currentFile]);
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {};
-    chapters.forEach((ch) => {
-      state[ch.path] = ch.files.some((f) => f.path === currentFile) || true;
-    });
+    if (activePath) state[activePath] = true;
     return state;
   });
+
+  useEffect(() => {
+    if (activePath && !expanded[activePath]) {
+      setExpanded((prev) => ({ ...prev, [activePath]: true }));
+    }
+  }, [activePath]);
+
   const [search, setSearch] = useState("");
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
   useEffect(() => {
     if (bookId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBookmarks(getBookmarks().filter((b) => b.bookId === bookId));
     }
   }, [bookId, currentFile]);
@@ -70,13 +205,16 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
   };
 
-  const filtered = chapters.filter((ch) =>
-    ch.name.toLowerCase().includes(search.toLowerCase()) ||
-    ch.shortName.toLowerCase().includes(search.toLowerCase()) ||
-    ch.files.some((f) => normalizeName(f.name).toLowerCase().includes(search.toLowerCase()))
-  );
-
-  const maxDepth = Math.max(...chapters.map((c) => c.depth), 0);
+  const filtered = useMemo(() => {
+    if (!search) return tree;
+    const q = search.toLowerCase();
+    const matches = (node: TreeNode): boolean =>
+      node.chapter.name.toLowerCase().includes(q) ||
+      node.chapter.shortName.toLowerCase().includes(q) ||
+      node.chapter.files.some((f) => normalizeName(f.name).toLowerCase().includes(q)) ||
+      node.children.some(matches);
+    return tree.filter(matches);
+  }, [tree, search]);
 
   const handleBookmarkClick = (filePath: string) => {
     const chapter = chapters.find((ch) => ch.files.some((f) => f.path === filePath));
@@ -149,12 +287,8 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
                   color: bm.filePath === currentFile ? "var(--accent)" : "var(--text-tertiary)",
                   fontWeight: bm.filePath === currentFile ? 500 : 400,
                 }}
-                onMouseEnter={(e) => {
-                  if (bm.filePath !== currentFile) e.currentTarget.style.background = "var(--bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (bm.filePath !== currentFile) e.currentTarget.style.background = "transparent";
-                }}
+                onMouseEnter={(e) => { if (bm.filePath !== currentFile) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                onMouseLeave={(e) => { if (bm.filePath !== currentFile) e.currentTarget.style.background = "transparent"; }}
               >
                 <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--accent)" }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
@@ -168,74 +302,18 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
       )}
 
       <nav className="flex-1 overflow-y-auto sidebar-scroll px-2 py-2">
-        {filtered.map((chapter) => {
-          const isExpanded = expanded[chapter.path] ?? true;
-          const chapterActive = chapter.files.some((f) => f.path === currentFile);
-          const indent = Math.min(chapter.depth - 1, maxDepth - 1) * 8;
-
-          return (
-            <div key={chapter.path} className="mb-0.5">
-              <button
-                onClick={() => toggle(chapter.path)}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-all"
-                style={{
-                  paddingLeft: `${8 + indent}px`,
-                  background: chapterActive ? "var(--bg-active)" : "transparent",
-                  color: chapterActive ? "var(--accent)" : "var(--text-tertiary)",
-                }}
-                onMouseEnter={(e) => {
-                  if (!chapterActive) e.currentTarget.style.background = "var(--bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!chapterActive) e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <Chevron open={isExpanded} />
-                <ChapterIcon />
-                <span className="truncate flex-1">{chapter.name}</span>
-                <span
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
-                  style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
-                >
-                  {chapter.files.length}
-                </span>
-              </button>
-
-              {isExpanded && (
-                <div className="ml-3 mt-0.5 space-y-0.5" style={{ borderLeft: "1px solid var(--border-subtle)" }}>
-                  {chapter.files.map((file) => {
-                    const isFileActive = file.path === currentFile;
-                    return (
-                      <button
-                        key={file.path}
-                        onClick={() => onFileSelect(chapter, file.path)}
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-all"
-                        style={{
-                          paddingLeft: `${16 + indent}px`,
-                          background: isFileActive ? "var(--accent-bg)" : "transparent",
-                          color: isFileActive ? "var(--accent)" : "var(--text-tertiary)",
-                          fontWeight: isFileActive ? 500 : 400,
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isFileActive) e.currentTarget.style.background = "var(--bg-hover)";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isFileActive) e.currentTarget.style.background = "transparent";
-                        }}
-                      >
-                        <FileIcon />
-                        <span className="truncate">{normalizeName(file.name)}</span>
-                      </button>
-                    );
-                  })}
-                  {chapter.files.length === 0 && (
-                    <p className="px-2.5 py-1.5 text-[11px] italic" style={{ color: "var(--text-muted)" }}>No files</p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {filtered.map((node) => (
+          <TreeNodeComponent
+            key={node.chapter.path}
+            node={node}
+            depth={0}
+            currentFile={currentFile}
+            onFileSelect={onFileSelect}
+            expanded={expanded}
+            onToggle={toggle}
+            activePath={activePath}
+          />
+        ))}
         {filtered.length === 0 && (
           <div className="flex flex-col items-center px-4 py-12 text-center">
             <svg className="h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1} style={{ color: "var(--text-muted)" }}>
