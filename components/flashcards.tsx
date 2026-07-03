@@ -7,6 +7,8 @@ import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { fetchFileContent, type BookConfig } from "@/lib/github";
 import ChatPanel from "@/components/chat-panel";
+import TTSControls from "@/components/tts-controls";
+import { useTTS } from "@/lib/use-tts";
 import toast from "react-hot-toast";
 
 class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -63,6 +65,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const [contributions, setContributions] = useState<DayData[]>([]);
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const tts = useTTS();
   const [swiping, setSwiping] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -425,7 +428,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     <div className="flex h-full" onKeyDown={handleKeyDown} tabIndex={0}>
       <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors" style={{ color: "var(--text-tertiary)" }}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -453,7 +456,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
       </div>
 
       {/* Controls bar */}
-      <div className="flex items-center gap-4 px-6 py-2.5 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-sidebar)" }}>
+      <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-sidebar)" }}>
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Scope</span>
           {(["current", "all"] as const).map((s) => (
@@ -510,6 +513,20 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           )}
           <span>{soundMuted ? "Muted" : "Sound"}</span>
         </button>
+        <TTSControls
+          enabled={tts.enabled}
+          speaking={tts.speaking}
+          paused={tts.paused}
+          speed={tts.speed}
+          voices={tts.voices}
+          selectedVoice={tts.selectedVoice}
+          onToggle={tts.toggleEnabled}
+          onSetSpeed={tts.setSpeed}
+          onSetVoice={tts.setSelectedVoice}
+          onStop={tts.stop}
+          onPause={tts.pause}
+          onResume={tts.resume}
+        />
       </div>
 
       {/* Main content area */}
@@ -526,7 +543,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           </div>
         </div>
       ) : current ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+        <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-8">
           <div className="w-full max-w-lg mb-6">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-medium" style={{ color: "var(--text-tertiary)" }}>{currentIdx + 1} / {totalCards}</span>
@@ -557,7 +574,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                   </svg>
                 </div>
               )}
-              <div className="absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col shadow-sm border"
+              <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border"
                 style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
@@ -571,6 +588,12 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
                     </svg>
                   </button>
+                  <button onClick={(e) => { e.stopPropagation(); tts.speak(current.question); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                    </svg>
+                  </button>
                   <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
                     className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -582,13 +605,19 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                   <p className="text-lg font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>{current.question}</p>
                 </div>
               </div>
-              <div className="absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col shadow-sm border rotate-y-180"
+              <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border rotate-y-180"
                 style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
                 <div className="flex items-center gap-2 mb-4">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--accent)" }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
                   </svg>
                   <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
+                  <button onClick={(e) => { e.stopPropagation(); tts.speak(current.answer); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                    </svg>
+                  </button>
                   <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
                     className="ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -603,27 +632,27 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             </div>
           </div>
 
-          <div className="flex items-center gap-4 mt-8">
+          <div className="flex items-center gap-2 sm:gap-4 mt-6 sm:mt-8 flex-wrap justify-center">
             <button onClick={handlePrev} disabled={currentIdx === 0}
-              className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
               </svg>
-              Previous
+              <span className="hidden sm:inline">Previous</span>
             </button>
-            <button onClick={handleFlip} className="flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-medium transition-all shadow-sm"
+            <button onClick={handleFlip} className="flex items-center gap-1.5 rounded-xl px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-medium transition-all shadow-sm"
               style={{ background: "var(--accent-bg)", color: "var(--accent)" }}>
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
               </svg>
-              {flipped ? "Hide answer" : "Show answer"}
+              {flipped ? "Hide" : "Show"}
             </button>
             <button onClick={handleNext}
-              className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
+              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium transition-all"
               style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-soft))", color: "white" }}>
-              Next
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <span className="hidden sm:inline">Next</span>
+              <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
               </svg>
             </button>
@@ -658,19 +687,24 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
       )}
       </div>
       {chatOpen && current && (
-        <div className="w-80 flex-shrink-0 flex flex-row">
-          <button
-            onClick={() => setChatOpen(false)}
-            className="flex items-center justify-center w-6 self-stretch cursor-pointer transition-colors"
-            style={{ background: "var(--bg-page)", borderLeft: "1px solid var(--border-subtle)", color: "var(--text-tertiary)" }}
-            title="Close sidebar"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-          </button>
-          <ChatPanel question={current.question} answer={current.answer} source={current.source} bookName={bookName} onClose={() => setChatOpen(false)} />
-        </div>
+        <>
+          {/* Mobile overlay backdrop */}
+          <div className="fixed inset-0 z-40 bg-black/30 sm:hidden" onClick={() => setChatOpen(false)} />
+          <div className="w-full sm:w-80 flex-shrink-0 flex flex-row fixed sm:relative bottom-0 right-0 z-50 sm:z-auto max-h-[70vh] sm:max-h-none rounded-t-2xl sm:rounded-none shadow-2xl sm:shadow-none"
+            style={{ background: "var(--bg-page)", borderLeft: "1px solid var(--border-subtle)" }}>
+            <button
+              onClick={() => setChatOpen(false)}
+              className="flex items-center justify-center w-6 self-stretch cursor-pointer transition-colors"
+              style={{ background: "var(--bg-page)", color: "var(--text-tertiary)" }}
+              title="Close sidebar"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <ChatPanel question={current.question} answer={current.answer} source={current.source} bookName={bookName} onClose={() => setChatOpen(false)} />
+          </div>
+        </>
       )}
     </div>
   );
