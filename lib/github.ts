@@ -48,6 +48,14 @@ const BOOKS_CONFIG: BookConfig[] = [
     name: "Operating Systems",
     id: "os",
   },
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "interview_prep_june/dsa_java",
+    name: "DSA Java",
+    id: "dsa-java",
+  },
 ];
 
 interface GitTreeItem {
