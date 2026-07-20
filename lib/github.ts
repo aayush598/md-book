@@ -56,6 +56,14 @@ const BOOKS_CONFIG: BookConfig[] = [
     name: "DSA Java",
     id: "dsa-java",
   },
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "Infosys_SP_DSE_Preparation",
+    name: "Infosys SP DSE Preparation",
+    id: "infosys-sp-dse",
+  },
 ];
 
 interface GitTreeItem {
