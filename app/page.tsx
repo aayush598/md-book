@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { parseGitHubUrl, addCustomBook, getCustomBooks, type CustomBook } from "@/lib/storage";
-import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 
 const configuredBooks = [
@@ -64,7 +63,6 @@ const configuredBooks = [
 
 export default function Home() {
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
   const [customBooks, setCustomBooks] = useState<CustomBook[]>([]);
   const [urlInput, setUrlInput] = useState("");
@@ -127,26 +125,6 @@ export default function Home() {
             <span className="text-sm font-semibold tracking-tight text-zinc-800">md book</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              {isSignedIn ? (
-                <UserButton afterSignOutUrl="/" />
-              ) : (
-                <>
-                  <SignInButton mode="modal">
-                    <button className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
-                      style={{ color: "var(--accent)", background: "var(--accent-bg)" }}>
-                      Sign in
-                    </button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all text-white"
-                      style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-soft))" }}>
-                      Sign up
-                    </button>
-                  </SignUpButton>
-                </>
-              )}
-            </div>
             <button onClick={toggleSound}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100"
               title={soundMuted ? "Unmute sounds" : "Mute sounds"}>

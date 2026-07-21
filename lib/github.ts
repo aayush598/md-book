@@ -85,15 +85,15 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
 
   const bookPrefix = config.path ? config.path + "/" : "";
 
-  // Collect all markdown files under the book path
-  const mdFiles = items.filter(
-    (item) => item.type === "blob" && (config.path ? item.path.startsWith(bookPrefix) : true) && item.path.endsWith(".md")
+  // Collect all supported files under the book path
+  const supportedFiles = items.filter(
+    (item) => item.type === "blob" && (config.path ? item.path.startsWith(bookPrefix) : true) && (item.path.endsWith(".md") || item.path.endsWith(".txt"))
   );
 
   // Group files by their parent directory path
   const chapterMap = new Map<string, { dirPath: string; files: RepoFile[] }>();
 
-  for (const file of mdFiles) {
+  for (const file of supportedFiles) {
     const relativePath = config.path ? file.path.slice(bookPrefix.length) : file.path;
     const parts = relativePath.split("/");
     const fileName = parts.pop()!;
@@ -110,24 +110,38 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
     });
   }
 
+  // Add intermediate directory chapters so the tree shows full nesting
+  const bookRoot = config.path ? bookPrefix.replace(/\/$/, "") : "";
+  const allDirs = Array.from(chapterMap.keys());
+  for (const dirPath of allDirs) {
+    const parts = dirPath.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (parent === bookRoot) continue;
+      if (bookRoot && !parent.startsWith(bookRoot)) continue;
+      if (!chapterMap.has(parent)) {
+        chapterMap.set(parent, { dirPath: parent, files: [] });
+      }
+    }
+  }
+
   const chapterList: BookChapter[] = [];
 
   for (const [, { dirPath, files }] of chapterMap) {
     const relativeDir = config.path ? dirPath.slice(bookPrefix.length) : dirPath;
+    if (!relativeDir) {
+      if (files.length === 0 && config.path) continue;
+    }
     const parts = relativeDir.split("/");
-    const shortName = parts[parts.length - 1] || "";
-    const displayName = parts
-      .map((p) => p.replace(/^[\d-]+/, "").replace(/[-_]/g, " ").trim())
-      .filter(Boolean)
-      .join(" / ");
-    const finalName = displayName || shortName.replace(/[-_]/g, " ").trim();
+    const rawName = parts[parts.length - 1] || config.path?.split("/").pop() || "";
+    const name = rawName.replace(/^[\d-]+/, "").replace(/[-_]/g, " ").trim() || rawName.replace(/[-_]/g, " ").trim();
 
     // Sort files by name
     files.sort((a, b) => a.name.localeCompare(b.name));
 
     chapterList.push({
-      name: finalName,
-      shortName: shortName.replace(/[-_]/g, " ").trim(),
+      name,
+      shortName: name,
       path: dirPath,
       files,
       depth: parts.length,
@@ -167,6 +181,6 @@ export function normalizeName(name: string): string {
   return name
     .replace(/^[\d-]+/, "")
     .replace(/[-_]/g, " ")
-    .replace(/\.md$/i, "")
+    .replace(/\.(md|txt)$/i, "")
     .trim();
 }

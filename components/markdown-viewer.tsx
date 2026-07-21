@@ -23,11 +23,66 @@ function DiagramBlock({ children }: any) {
   );
 }
 
+const ROADMAP_RE = /^Week\s+\d/i;
+
+function RoadmapBlock({ lines }: { lines: string[] }) {
+  const colors: Record<string, string> = {
+    EASY: "#22c55e",
+    "MEDIUM": "#eab308",
+    HARD: "#ef4444",
+    COMPLEX: "#a855f7",
+  };
+
+  return (
+    <div className="my-6 space-y-3">
+      {lines.map((line, i) => {
+        const m = line.match(/^(.+?):\s*(.+?)\s*→\s*(.+)$/);
+        if (!m) {
+          return <p key={i} className="text-sm" style={{ color: "var(--text-secondary)" }}>{line}</p>;
+        }
+        const period = m[1].trim();
+        const topic = m[2].trim();
+        const level = m[3].trim();
+        const levelColor = Object.keys(colors).find((k) => level.includes(k))
+          ? colors[Object.keys(colors).find((k) => level.includes(k))!]
+          : "var(--accent)";
+
+        return (
+          <div key={i} className="flex items-start gap-4 rounded-xl p-4 transition-all hover:translate-x-0.5"
+            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
+              style={{ background: `${levelColor}20`, color: levelColor }}>
+              {i + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold" style={{ color: "var(--accent)" }}>{period}</span>
+                <span className="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                  style={{ background: `${levelColor}18`, color: levelColor }}>
+                  {level}
+                </span>
+              </div>
+              <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-primary)" }}>
+                {topic}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CodeBlock({ className, children, ...props }: any) {
   const text = String(children);
 
   if (isDiagram(text)) {
     return <DiagramBlock>{children}</DiagramBlock>;
+  }
+
+  const lines = text.trim().split("\n");
+  if (lines.length >= 2 && lines.every((l) => ROADMAP_RE.test(l.trim())) && lines.every((l) => l.includes("→"))) {
+    return <RoadmapBlock lines={lines.map((l) => l.trim())} />;
   }
 
   return <CodeBlockInner className={className} {...props}>{children}</CodeBlockInner>;
@@ -70,8 +125,8 @@ function CodeBlockInner({ className, children, ...props }: any) {
           </>
         )}
       </button>
-      <pre className="overflow-x-auto rounded-xl" style={{ background: "var(--pre-bg)" }}>
-        <code className={`font-mono text-sm leading-relaxed`} style={{ color: "var(--pre-text)" }} {...props}>
+      <pre className="overflow-x-auto rounded-xl" style={{ background: "var(--pre-bg)", lineHeight: 1.45 }}>
+        <code className="font-mono text-sm" style={{ color: "var(--pre-text)" }} {...props}>
           {children}
         </code>
       </pre>
@@ -92,6 +147,7 @@ function InlineCode({ children, ...props }: any) {
 }
 
 const components: Components = {
+  pre: ({ children }) => <>{children}</>,
   h1: ({ children, ...props }) => (
     <h1 className="text-3xl font-bold tracking-tight mb-6 mt-0 leading-tight" style={{ color: "var(--text-primary)" }} {...props}>
       {children}
@@ -137,7 +193,8 @@ const components: Components = {
     </blockquote>
   ),
   code: ({ className, children, ...props }: any) => {
-    const isInline = !className;
+    const text = String(children);
+    const isInline = !className && !text.includes("\n");
     return isInline ? <InlineCode {...props}>{children}</InlineCode> : <CodeBlock className={className} {...props}>{children}</CodeBlock>;
   },
   hr: (props) => <hr className="my-10" style={{ border: "none", height: "1px", background: "var(--divider-gradient)" }} {...props} />,

@@ -2,7 +2,6 @@
 
 import { Component, useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { parseFlashcardsFromFiles } from "@/lib/flashcards";
-import { useAuth } from "@/lib/stores/auth-store";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { fetchFileContent, type BookConfig } from "@/lib/github";
@@ -53,7 +52,6 @@ interface DayData {
 }
 
 function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initialView = "cards", config, allFilePaths }: FlashcardsProps) {
-  const { userId, isSignedIn } = useAuth();
   const store = useFlashcardStore();
   const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted);
   const [mode, setMode] = useState<StudyMode>("random");
@@ -171,22 +169,9 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const progress = totalCards > 0 ? ((currentIdx + 1) / totalCards) * 100 : 0;
 
   const fetchStats = useCallback(async () => {
-    try {
-      const [sr, ar] = await Promise.all([
-        fetch("/api/flashcards/stats"),
-        fetch("/api/flashcards/activity?days=91"),
-      ]);
-      if (sr.ok) setStats(await sr.json());
-      if (ar.ok) {
-        const data: { date: string; cardsReviewed: number }[] = await ar.json();
-        setContributions(data.map((d) => ({ date: d.date, count: d.cardsReviewed })));
-      }
-      if (!sr.ok || !ar.ok) throw new Error("API not available");
-    } catch {
-      const { getFlashcardStats, getDailyActivity } = await import("@/lib/flashcard-storage");
-      setStats(getFlashcardStats());
-      setContributions(getDailyActivity(91).map((d) => ({ date: d.date, count: d.cardsReviewed })));
-    }
+    const { getFlashcardStats, getDailyActivity } = await import("@/lib/flashcard-storage");
+    setStats(getFlashcardStats());
+    setContributions(getDailyActivity(91).map((d) => ({ date: d.date, count: d.cardsReviewed })));
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
@@ -197,17 +182,9 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   }, [mode, store.allowRepeat]);
 
   const recordReview = useCallback(async (count: number) => {
-    if (isSignedIn && userId && bookId) {
-      fetch("/api/flashcards/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookId, count }),
-      }).catch(() => {});
-    } else {
-      const { recordFlashcardReview } = await import("@/lib/flashcard-storage");
-      recordFlashcardReview(count);
-    }
-  }, [isSignedIn, userId, bookId]);
+    const { recordFlashcardReview } = await import("@/lib/flashcard-storage");
+    recordFlashcardReview(count);
+  }, []);
 
   const handleNext = useCallback(() => {
     playNextSound();

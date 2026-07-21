@@ -14,7 +14,6 @@ import MarkdownViewer from "@/components/markdown-viewer";
 import ReadingControls from "@/components/reading-controls";
 import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
-import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 
 interface LoadedFile {
@@ -42,13 +41,12 @@ export default function BookPage() {
   const [initialLoad, setInitialLoad] = useState(true);
 
   const { fontSize, lineHeight, readingMode, sidebarPinned, setSidebarPinned, getFontSizePx } = useReadingSettings();
-  const { isSignedIn } = useAuth();
   const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
 
   const [book, setBook] = useState<Book | null>(null);
   const [bookLoading, setBookLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
   const [anchorFile, setAnchorFile] = useState<string | null>(null);
@@ -366,18 +364,17 @@ export default function BookPage() {
             <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{book.name}</span>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
             {/* Dashboard */}
             <button
               onClick={() => { setFlashcardInitialView("dashboard"); setFlashcardMode(true); }}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-all"
               style={{ color: "var(--accent)", background: "var(--accent-bg)" }}
               title="Flashcard Dashboard"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
               </svg>
-              Dashboard
             </button>
 
             {/* Flashcard mode */}
@@ -428,16 +425,15 @@ export default function BookPage() {
             </button>
 
             {currentIdx !== -1 && (
-              <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--text-tertiary)" }}>
-                <span className="flex h-6 min-w-[22px] items-center justify-center rounded-md px-1.5" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+              <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text-tertiary)" }}>
+                <span className="flex h-6 min-w-[20px] items-center justify-center rounded-md px-1" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                   {currentIdx + 1}
                 </span>
-                <span>/ {allFiles.length}</span>
+                <span className="hidden sm:inline">/ {allFiles.length}</span>
                 {readingTime > 0 && (
-                  <>
-                    <span className="hidden sm:inline mx-0.5" style={{ color: "var(--text-muted)" }}>·</span>
-                    <span className="hidden sm:inline" style={{ color: "var(--text-muted)" }}>{readingTime} min</span>
-                  </>
+                  <span className="hidden sm:inline text-nowrap" style={{ color: "var(--text-muted)" }}>
+                    <span className="mx-0.5">·</span>{readingTime}m
+                  </span>
                 )}
               </div>
             )}
@@ -476,27 +472,6 @@ export default function BookPage() {
               )}
             </button>
 
-            {/* Auth buttons */}
-            <div className="flex items-center gap-1.5 ml-1">
-              {isSignedIn ? (
-                <UserButton afterSignOutUrl="/" />
-              ) : (
-                <>
-                  <SignInButton mode="modal">
-                    <button className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
-                      style={{ color: "var(--accent)", background: "var(--accent-bg)" }}>
-                      Sign in
-                    </button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all"
-                      style={{ color: "white", background: "linear-gradient(135deg, var(--accent), var(--accent-soft))" }}>
-                      Sign up
-                    </button>
-                  </SignUpButton>
-                </>
-              )}
-            </div>
           </div>
         </div>
 
@@ -512,7 +487,7 @@ export default function BookPage() {
              onClick={() => setSidebarOpen(false)} />
       )}
 
-      <div className={`fixed inset-y-0 left-0 z-40 w-[280px] transform transition-all duration-300 ease-out ${sidebarPinned ? "lg:relative" : "lg:absolute"} ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <div className={`fixed inset-y-0 left-0 z-40 transition-all duration-300 ease-out ${sidebarPinned ? "lg:relative" : "lg:absolute"}`} style={{ transform: sidebarOpen ? 'translateX(0)' : 'translateX(calc(-100% - 12px))' }}>
         <Sidebar
           chapters={book.chapters}
           currentFile={anchorFile}

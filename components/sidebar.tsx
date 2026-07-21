@@ -1,7 +1,7 @@
 "use client";
 
 import { BookChapter, normalizeName } from "@/lib/github";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getBookmarks, type Bookmark } from "@/lib/storage";
 
 interface SidebarProps {
@@ -91,9 +91,9 @@ function findActiveChapterPath(tree: TreeNode[], currentFile: string | null): st
   if (!currentFile) return null;
   for (const node of tree) {
     if (node.chapter.files.some((f) => f.path === currentFile)) return node.chapter.path;
-    if (fileBelongsToChapter(node.chapter.path, currentFile)) return node.chapter.path;
     const child = findActiveChapterPath(node.children, currentFile);
     if (child) return child;
+    if (fileBelongsToChapter(node.chapter.path, currentFile)) return node.chapter.path;
   }
   return null;
 }
@@ -112,12 +112,15 @@ function TreeNodeComponent({
   const isExpanded = expanded[node.chapter.path] ?? false;
   const chapterActive = node.chapter.files.some((f) => f.path === currentFile) || activePath === node.chapter.path;
   const hasChildren = node.children.length > 0;
+  const hasFiles = node.chapter.files.length > 0;
   const indent = depth * 8;
+  const fileCount = node.chapter.files.length + node.children.reduce((sum, c) => sum + c.chapter.files.length, 0);
 
   return (
     <div className="mb-0.5">
       <button
         onClick={() => onToggle(node.chapter.path)}
+        data-active={chapterActive ? "true" : undefined}
         className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-all"
         style={{
           paddingLeft: `${8 + indent}px`,
@@ -128,10 +131,16 @@ function TreeNodeComponent({
         onMouseLeave={(e) => { if (!chapterActive) e.currentTarget.style.background = "transparent"; }}
       >
         <Chevron open={isExpanded} />
-        <ChapterIcon />
+        {hasChildren && !hasFiles ? (
+          <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--text-tertiary)" }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+          </svg>
+        ) : (
+          <ChapterIcon />
+        )}
         <span className="truncate flex-1">{node.chapter.name}</span>
         <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}>
-          {node.chapter.files.length}
+          {fileCount}
         </span>
       </button>
 
@@ -149,11 +158,12 @@ function TreeNodeComponent({
               activePath={activePath}
             />
           ))}
-          {node.chapter.files.map((file) => {
+          {hasFiles && node.chapter.files.map((file) => {
             const isFileActive = file.path === currentFile;
             return (
               <button
                 key={file.path}
+                data-active={isFileActive ? "true" : undefined}
                 onClick={() => onFileSelect(node.chapter, file.path)}
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-all"
                 style={{
@@ -165,7 +175,7 @@ function TreeNodeComponent({
                 onMouseEnter={(e) => { if (!isFileActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
                 onMouseLeave={(e) => { if (!isFileActive) e.currentTarget.style.background = "transparent"; }}
               >
-                {hasChildren ? <FileIcon /> : <DotIcon />}
+                <DotIcon />
                 <span className="truncate">{normalizeName(file.name)}</span>
               </button>
             );
@@ -176,9 +186,47 @@ function TreeNodeComponent({
   );
 }
 
+const SIDEBAR_WIDTH_KEY = "md-book-sidebar-width";
+
 export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }: SidebarProps) {
   const tree = useMemo(() => buildTree(chapters), [chapters]);
   const activePath = useMemo(() => findActiveChapterPath(tree, currentFile), [tree, currentFile]);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  const [width, setWidth] = useState(() => {
+    if (typeof window === "undefined") return 280;
+    try { return parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) || "280", 10); }
+    catch { return 280; }
+  });
+
+  const widthRef = useRef(width);
+  widthRef.current = width;
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const newWidth = Math.max(180, Math.min(500, ev.clientX));
+      setWidth(newWidth);
+    };
+
+    const onUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(widthRef.current));
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {};
@@ -186,10 +234,22 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
     return state;
   });
 
+  // Expand active chapter and all its ancestors
   useEffect(() => {
-    if (activePath && !expanded[activePath]) {
-      setExpanded((prev) => ({ ...prev, [activePath]: true }));
+    if (!activePath) return;
+    const paths = [activePath];
+    const parts = activePath.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      paths.push(parts.slice(0, i).join("/"));
     }
+    setExpanded((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const p of paths) {
+        if (!next[p]) { next[p] = true; changed = true; }
+      }
+      return changed ? next : prev;
+    });
   }, [activePath]);
 
   const [search, setSearch] = useState("");
@@ -221,8 +281,19 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
     if (chapter) onFileSelect(chapter, filePath);
   };
 
+  const navRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to active file
+  useEffect(() => {
+    if (!navRef.current || !currentFile) return;
+    const active = navRef.current.querySelector('[data-active="true"]');
+    if (active) {
+      active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [currentFile, expanded]);
+
   return (
-    <aside className="flex h-full flex-col" style={{ background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-subtle)" }}>
+    <aside ref={sidebarRef} className="flex h-full flex-col relative" style={{ background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-subtle)", width }}>
       <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div
           className="flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-sm"
@@ -301,7 +372,7 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
         </div>
       )}
 
-      <nav className="flex-1 overflow-y-auto sidebar-scroll px-2 py-2">
+      <nav ref={navRef} className="flex-1 overflow-y-auto sidebar-scroll px-2 py-2">
         {filtered.map((node) => (
           <TreeNodeComponent
             key={node.chapter.path}
@@ -323,6 +394,14 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
           </div>
         )}
       </nav>
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute right-0 top-0 bottom-0 z-20 w-3 cursor-col-resize flex items-center justify-center group"
+      >
+        <div className="h-8 w-0.5 rounded-full transition-all group-hover:h-10 group-active:h-10" style={{ background: "var(--border-subtle)" }} />
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "linear-gradient(90deg, transparent, var(--accent-glow), transparent)" }} />
+      </div>
     </aside>
   );
 }
