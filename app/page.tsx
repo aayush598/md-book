@@ -125,6 +125,12 @@ export default function Home() {
             <span className="text-sm font-semibold tracking-tight text-zinc-800">md book</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/ebook" className="flex items-center gap-1.5 rounded-full border border-zinc-200/60 bg-white/50 px-4 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:border-zinc-300 hover:bg-white hover:text-zinc-800">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              Create Ebook
+            </Link>
             <button onClick={toggleSound}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100"
               title={soundMuted ? "Unmute sounds" : "Mute sounds"}>

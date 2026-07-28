@@ -15,6 +15,8 @@ import ReadingControls from "@/components/reading-controls";
 import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
+import { saveProject as saveEbookProject } from "@/lib/ebook-storage";
+import { defaultTheme } from "@/lib/ebook-theme";
 
 interface LoadedFile {
   path: string;
@@ -281,6 +283,44 @@ export default function BookPage() {
     setAnchorFile((prev) => prev);
   }, [bookId, anchorFile, book, bookmarkActive]);
 
+  const handleEditInDesigner = useCallback(() => {
+    if (!book || loadedFiles.length === 0) return;
+    const chapters = loadedFiles.map((f, i) => {
+      const folder = book.chapters.find((ch) => ch.files.some((file) => file.path === f.path));
+      const part = folder && folder.depth > 0 ? folder.shortName : undefined;
+      const title = (f.path.split("/").pop() || "").replace(/\.(md|txt)$/i, "").replace(/[-_]/g, " ");
+      return {
+        id: crypto.randomUUID(),
+        title: title.replace(/\b\w/g, (c) => c.toUpperCase()),
+        content: f.content,
+        order: i,
+        part,
+      };
+    });
+    const project = {
+      id: crypto.randomUUID(),
+      name: book.name,
+      author: "",
+      templateId: "classic",
+      chapters,
+      cover: { layout: "centered" as const, title: book.name, subtitle: "", author: "", bgColor: "#1a1a2e", textColor: "#ffffff", accentColor: "#e94560", titleFontSize: 42, coverImage: "", showCoverPage: true },
+      pageSize: "6x9",
+      bgColor: "#ffffff",
+      theme: defaultTheme(),
+      metadata: {
+        isbn: "", doi: "", publisher: "", language: "en", keywords: [], categories: [],
+        edition: "First Edition", series: "",
+        printReady: { cmyk: false, bleed: "0.125in", cropMarks: false, printerMarks: false, binding: "perfect" as const, gutter: "0in" },
+        accessibility: { screenReader: true, altText: true, contrast: true, keyboardNav: true, accessiblePdf: false, wcag: "WCAG 2.1 AA" },
+      },
+      branding: { logo: "", watermark: "", brandColors: [], brandFonts: "", brandTemplate: "" },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    saveEbookProject(project);
+    router.push(`/ebook?open=${project.id}`);
+  }, [book, loadedFiles, router]);
+
   if (!config) {
     return (
       <div className="flex h-screen items-center justify-center" style={{ background: "var(--bg-page)" }}>
@@ -362,6 +402,19 @@ export default function BookPage() {
             </Link>
             <span style={{ color: "var(--text-muted)" }} className="text-xs">/</span>
             <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{book.name}</span>
+            <button
+              onClick={handleEditInDesigner}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+              style={{ color: "var(--accent)", background: "var(--accent-bg)" }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "var(--accent-glow)"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-bg)"}
+              title="Edit this book in the Ebook Designer"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+              Edit
+            </button>
           </div>
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
