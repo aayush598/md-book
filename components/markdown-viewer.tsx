@@ -2,7 +2,8 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useState, useCallback } from "react";
+import hljs from "highlight.js";
+import { useState, useCallback, useMemo } from "react";
 import type { Components } from "react-markdown";
 
 const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u25A0-\u25FF\u2190-\u21FF\u2080-\u2089\u25CB\u25A1\u25AA\u25AB\u25AC\u25AD]/;
@@ -91,6 +92,22 @@ function CodeBlock({ className, children, ...props }: any) {
 function CodeBlockInner({ className, children, ...props }: any) {
   const [copied, setCopied] = useState(false);
 
+  const langMatch = /language-([\w+-]+)/.exec(className || "");
+  const rawLang = langMatch ? langMatch[1].toLowerCase() : "";
+  const langName = rawLang === "js" ? "javascript" : rawLang;
+
+  const highlighted = useMemo(() => {
+    const text = String(children).replace(/\n$/, "");
+    if (langName && hljs.getLanguage(langName)) {
+      return hljs.highlight(text, { language: langName, ignoreIllegals: true }).value;
+    }
+    try {
+      return hljs.highlightAuto(text).value;
+    } catch {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  }, [children, langName]);
+
   const handleCopy = useCallback(() => {
     const t = String(children).replace(/\n$/, "");
     navigator.clipboard.writeText(t).then(() => {
@@ -100,35 +117,43 @@ function CodeBlockInner({ className, children, ...props }: any) {
   }, [children]);
 
   return (
-    <div className="code-block-wrapper group">
-      <button
-        onClick={handleCopy}
-        className="copy-btn flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all"
-        style={{
-          background: copied ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.08)",
-          color: copied ? "#22c55e" : "rgba(255,255,255,0.5)",
-        }}
-      >
-        {copied ? (
-          <>
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            Copied
-          </>
-        ) : (
-          <>
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-            </svg>
-            Copy
-          </>
+    <div className="code-block-wrapper group relative">
+      <div className={`code-block-toolbar ${langName ? "" : "no-lang"}`}>
+        {langName && (
+          <span className="code-block-lang">{langName}</span>
         )}
-      </button>
-      <pre className="overflow-x-auto rounded-xl" style={{ background: "var(--pre-bg)", lineHeight: 1.45 }}>
-        <code className="font-mono text-sm" style={{ color: "var(--pre-text)" }} {...props}>
-          {children}
-        </code>
+        <button
+          onClick={handleCopy}
+          className="copy-btn flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-all"
+          style={{
+            background: copied ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.08)",
+            color: copied ? "#22c55e" : "rgba(255,255,255,0.5)",
+          }}
+        >
+          {copied ? (
+            <>
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Copied
+            </>
+          ) : (
+            <>
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+              </svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <pre className={`overflow-x-auto rounded-xl ${langName ? "has-lang" : ""}`} style={{ background: "var(--pre-bg)", lineHeight: 1.45 }}>
+        <code
+          className={`hljs font-mono text-sm ${langName ? `language-${langName}` : ""}`}
+          style={{ color: "var(--pre-text)", background: "transparent", padding: 0 }}
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+          {...props}
+        />
       </pre>
     </div>
   );

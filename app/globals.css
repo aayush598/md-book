@@ -380,17 +380,125 @@ body {
 /* Copy button for code blocks */
 .code-block-wrapper {
   position: relative;
+  margin-bottom: 1.25rem;
 }
-.copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  opacity: 0;
-  transition: opacity 0.2s;
+.code-block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--pre-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+}
+.code-block-toolbar.no-lang {
+  justify-content: flex-end;
+}
+.code-block-toolbar .copy-btn {
+  position: static;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
 }
 .code-block-wrapper:hover .copy-btn {
   opacity: 1;
+}
+.code-block-lang {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.reader-prose .code-block-wrapper pre {
+  margin-top: 0;
+  margin-bottom: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Syntax highlighting (reader view) — dark theme, pre bg is dark in all themes */
+.reader-prose .hljs {
+  color: var(--pre-text);
+  display: block;
+  overflow-x: auto;
+}
+.reader-prose .hljs-comment,
+.reader-prose .hljs-quote {
+  color: #7d8590;
+  font-style: italic;
+}
+.reader-prose .hljs-keyword,
+.reader-prose .hljs-selector-tag,
+.reader-prose .hljs-subst {
+  color: #ff7b72;
+}
+.reader-prose .hljs-number,
+.reader-prose .hljs-literal,
+.reader-prose .hljs-variable,
+.reader-prose .hljs-template-variable,
+.reader-prose .hljs-tag .hljs-attr {
+  color: #79c0ff;
+}
+.reader-prose .hljs-string,
+.reader-prose .hljs-doctag {
+  color: #a5d6ff;
+}
+.reader-prose .hljs-title,
+.reader-prose .hljs-section,
+.reader-prose .hljs-selector-id,
+.reader-prose .hljs-title.class_,
+.reader-prose .hljs-type,
+.reader-prose .hljs-built_in,
+.reader-prose .hljs-builtin-name {
+  color: #ffa657;
+}
+.reader-prose .hljs-title.function_,
+.reader-prose .hljs-function .hljs-title {
+  color: #d2a8ff;
+}
+.reader-prose .hljs-tag,
+.reader-prose .hljs-name,
+.reader-prose .hljs-attribute {
+  color: #7ee787;
+}
+.reader-prose .hljs-regexp,
+.reader-prose .hljs-link {
+  color: #a5d6ff;
+}
+.reader-prose .hljs-symbol,
+.reader-prose .hljs-bullet {
+  color: #79c0ff;
+}
+.reader-prose .hljs-meta {
+  color: #7d8590;
+}
+.reader-prose .hljs-deletion {
+  background: #ffeef0;
+  color: #ffa198;
+}
+.reader-prose .hljs-addition {
+  background: #f0fff4;
+  color: #aff5b4;
+}
+.reader-prose .hljs-emphasis {
+  font-style: italic;
+}
+.reader-prose .hljs-strong {
+  font-weight: bold;
+}
+.reader-prose .hljs-params {
+  color: var(--pre-text);
+}
+.reader-prose .hljs-property {
+  color: #79c0ff;
+}
+.reader-prose .hljs-operator {
+  color: #ff7b72;
 }
 
 /* ASCII diagram blocks */
