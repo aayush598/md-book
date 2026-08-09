@@ -1,6 +1,10 @@
 "use client";
 
 import { Component, useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import hljs from "highlight.js";
+import type { Components } from "react-markdown";
 import { parseFlashcardsFromFiles } from "@/lib/flashcards";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
@@ -32,6 +36,102 @@ class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { 
     return this.props.children;
   }
 }
+
+function MiniCode({ className, children }: any) {
+  const langMatch = /language-([\w+-]+)/.exec(className || "");
+  const langName = langMatch ? langMatch[1].toLowerCase() : "";
+
+  const html = useMemo(() => {
+    const text = String(children).replace(/\n$/, "");
+    try {
+      if (langName && hljs.getLanguage(langName)) {
+        return hljs.highlight(text, { language: langName, ignoreIllegals: true }).value;
+      }
+      return hljs.highlightAuto(text).value;
+    } catch {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  }, [children, langName]);
+
+  return (
+    <pre
+      className="fc-code"
+      style={{
+        background: "var(--pre-bg)",
+        color: "var(--pre-text)",
+        borderRadius: 10,
+        padding: "0.75rem 1rem",
+        margin: "0.5rem 0",
+        overflowX: "auto",
+        fontSize: "0.8rem",
+        lineHeight: 1.5,
+        fontFamily: "var(--font-mono), monospace",
+      }}
+    >
+      <code className="hljs" style={{ background: "transparent", padding: 0, color: "inherit", fontFamily: "inherit" }} dangerouslySetInnerHTML={{ __html: html }} />
+    </pre>
+  );
+}
+
+const miniComponents: Components = {
+  pre: ({ children }) => <>{children}</>,
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  h1: ({ children }) => <p className="mb-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+  h2: ({ children }) => <p className="mb-2 text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+  h3: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+  h4: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+  blockquote: ({ children }) => (
+    <blockquote className="mb-2 border-l-2 pl-3" style={{ borderColor: "var(--accent)", color: "var(--text-secondary)" }}>{children}</blockquote>
+  ),
+  strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
+  em: ({ children }) => <em style={{ color: "var(--text-secondary)" }}>{children}</em>,
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: 2 }}>{children}</a>
+  ),
+  ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  code: ({ className, children }: any) => {
+    const text = String(children);
+    const isInline = !className && !text.includes("\n");
+    if (isInline) {
+      return (
+        <code
+          className="fc-inline-code"
+          style={{
+            background: "var(--code-bg)",
+            color: "var(--code-text)",
+            padding: "0.12em 0.4em",
+            borderRadius: 6,
+            fontFamily: "var(--font-mono), monospace",
+            fontSize: "0.85em",
+            wordBreak: "break-word",
+          }}
+        >
+          {children}
+        </code>
+      );
+    }
+    return <MiniCode className={className}>{children}</MiniCode>;
+  },
+};
+
+function MiniMarkdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={miniComponents}>
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+const ttsText = (md: string) =>
+  md
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/```[\s\S]*?```/g, " code ")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/#{1,6}\s+/g, "")
+    .trim();
 
 interface FlashcardsProps {
   files: { path: string; content: string }[];
@@ -521,7 +621,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
         </div>
       ) : current ? (
         <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-8">
-          <div className="w-full max-w-lg mb-6">
+          <div className="w-full max-w-xl mb-6">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-medium" style={{ color: "var(--text-tertiary)" }}>{currentIdx + 1} / {totalCards}</span>
               <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{totalCards - currentIdx - 1} remaining</span>
@@ -531,7 +631,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             </div>
           </div>
 
-          <div className="w-full max-w-lg perspective cursor-pointer select-none" onClick={handleFlip}
+          <div className="w-full max-w-xl perspective cursor-pointer select-none" onClick={handleFlip}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}>
@@ -565,7 +665,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
                     </svg>
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); tts.speak(current.question); }}
+                  <button onClick={(e) => { e.stopPropagation(); tts.speak(ttsText(current.question)); }}
                     className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
@@ -578,8 +678,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     </svg>
                   </button>
                 </div>
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-lg font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>{current.question}</p>
+                <div className="flex-1 flex items-center justify-center overflow-y-auto">
+                  <div className="text-base font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>
+                    <MiniMarkdown content={current.question} />
+                  </div>
                 </div>
               </div>
               <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border rotate-y-180"
@@ -589,7 +691,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
                   </svg>
                   <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
-                  <button onClick={(e) => { e.stopPropagation(); tts.speak(current.answer); }}
+                  <button onClick={(e) => { e.stopPropagation(); tts.speak(ttsText(current.answer)); }}
                     className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
@@ -602,8 +704,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     </svg>
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{current.answer}</div>
+                <div className="flex-1 overflow-y-auto flashcard-answer">
+                  <div className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                    <MiniMarkdown content={current.answer} />
+                  </div>
                 </div>
               </div>
             </div>

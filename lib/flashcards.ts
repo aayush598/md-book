@@ -6,15 +6,12 @@ export interface Flashcard {
   difficulty: "easy" | "medium" | "hard";
 }
 
-function stripMD(text: string): string {
+function cleanText(text: string): string {
   return text
-    .replace(/\[([^\]]*)\]\([^)]+\)/g, "$1")
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]+\)/g, "$1")
     .replace(/^["\u201c\u201d](.*)["\u201c\u201d]\s*$/gm, "$1")
-    .replace(/^#{2,3}\s+Q\d*\s*[:\.\)]\s*/gm, "")
+    .replace(/^#{1,3}\s+Q\d*\s*[:\.\)]\s*/gm, "")
     .trim();
 }
 
@@ -70,7 +67,7 @@ function extractAnswerBlock(src: string, startIdx: number): string {
   }
 
   while (block.length > 0 && block[block.length - 1].trim() === "") block.pop();
-  return stripMD(block.join("\n"));
+  return cleanText(block.join("\n"));
 }
 
 // Format A: ## Q1: <question>  or  ### Q1: <question>\n**A:** <answer>
@@ -87,8 +84,8 @@ export function parseFlashcards(content: string, source?: string): Flashcard[] {
   const seen = new Set<string>();
 
   function add(q: string, a: string) {
-    const question = stripMD(q);
-    const answer = stripMD(a);
+    const question = cleanText(q);
+    const answer = cleanText(a);
     if (!question || !answer || answer.length < 10) return;
     const key = question.toLowerCase().slice(0, 80);
     if (seen.has(key)) return;

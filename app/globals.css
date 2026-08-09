@@ -501,6 +501,88 @@ body {
   color: #ff7b72;
 }
 
+/* Flashcard answers — syntax highlighting scoped to the card answer area */
+.flashcard-answer .fc-code pre {
+  margin: 0;
+}
+.flashcard-answer code.hljs {
+  display: block;
+  overflow-x: auto;
+}
+.flashcard-answer .hljs-comment,
+.flashcard-answer .hljs-quote {
+  color: #7d8590;
+  font-style: italic;
+}
+.flashcard-answer .hljs-keyword,
+.flashcard-answer .hljs-selector-tag,
+.flashcard-answer .hljs-subst {
+  color: #ff7b72;
+}
+.flashcard-answer .hljs-number,
+.flashcard-answer .hljs-literal,
+.flashcard-answer .hljs-variable,
+.flashcard-answer .hljs-template-variable,
+.flashcard-answer .hljs-tag .hljs-attr {
+  color: #79c0ff;
+}
+.flashcard-answer .hljs-string,
+.flashcard-answer .hljs-doctag {
+  color: #a5d6ff;
+}
+.flashcard-answer .hljs-title,
+.flashcard-answer .hljs-section,
+.flashcard-answer .hljs-selector-id,
+.flashcard-answer .hljs-title.class_,
+.flashcard-answer .hljs-type,
+.flashcard-answer .hljs-built_in,
+.flashcard-answer .hljs-builtin-name {
+  color: #ffa657;
+}
+.flashcard-answer .hljs-title.function_,
+.flashcard-answer .hljs-function .hljs-title {
+  color: #d2a8ff;
+}
+.flashcard-answer .hljs-tag,
+.flashcard-answer .hljs-name,
+.flashcard-answer .hljs-attribute {
+  color: #7ee787;
+}
+.flashcard-answer .hljs-regexp,
+.flashcard-answer .hljs-link {
+  color: #a5d6ff;
+}
+.flashcard-answer .hljs-symbol,
+.flashcard-answer .hljs-bullet {
+  color: #79c0ff;
+}
+.flashcard-answer .hljs-meta {
+  color: #7d8590;
+}
+.flashcard-answer .hljs-deletion {
+  background: #ffeef0;
+  color: #ffa198;
+}
+.flashcard-answer .hljs-addition {
+  background: #f0fff4;
+  color: #aff5b4;
+}
+.flashcard-answer .hljs-emphasis {
+  font-style: italic;
+}
+.flashcard-answer .hljs-strong {
+  font-weight: bold;
+}
+.flashcard-answer .hljs-params {
+  color: var(--pre-text);
+}
+.flashcard-answer .hljs-property {
+  color: #79c0ff;
+}
+.flashcard-answer .hljs-operator {
+  color: #ff7b72;
+}
+
 /* ASCII diagram blocks */
 .diagram-block {
   margin-bottom: 1.25rem;
