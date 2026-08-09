@@ -583,6 +583,82 @@ body {
   color: #ff7b72;
 }
 
+/* Shared syntax-highlighting theme (problems browser sections + IDE overlay + live editor).
+   Pre/code backgrounds are dark everywhere these render, so a dark GitHub palette applies globally. */
+.hljs-comment,
+.hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  color: #ff7b72;
+}
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr {
+  color: #79c0ff;
+}
+.hljs-string,
+.hljs-doctag {
+  color: #a5d6ff;
+}
+.hljs-title,
+.hljs-section,
+.hljs-selector-id,
+.hljs-title.class_,
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name {
+  color: #ffa657;
+}
+.hljs-title.function_,
+.hljs-function .hljs-title {
+  color: #d2a8ff;
+}
+.hljs-tag,
+.hljs-name,
+.hljs-attribute {
+  color: #7ee787;
+}
+.hljs-regexp,
+.hljs-link {
+  color: #a5d6ff;
+}
+.hljs-symbol,
+.hljs-bullet {
+  color: #79c0ff;
+}
+.hljs-meta {
+  color: #8b949e;
+}
+.hljs-deletion {
+  background: #ffeef0;
+  color: #ffa198;
+}
+.hljs-addition {
+  background: #f0fff4;
+  color: #aff5b4;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+.hljs-params {
+  color: inherit;
+}
+.hljs-property {
+  color: #79c0ff;
+}
+.hljs-operator {
+  color: #ff7b72;
+}
+
 /* ASCII diagram blocks */
 .diagram-block {
   margin-bottom: 1.25rem;

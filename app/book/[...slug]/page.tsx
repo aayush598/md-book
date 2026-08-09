@@ -14,6 +14,7 @@ import MarkdownViewer from "@/components/markdown-viewer";
 import ReadingControls from "@/components/reading-controls";
 import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
+import ProblemsView from "@/components/problems-view";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { saveProject as saveEbookProject } from "@/lib/ebook-storage";
 import { defaultTheme } from "@/lib/ebook-theme";
@@ -265,6 +266,7 @@ export default function BookPage() {
   const bookmarkActive = bookId && anchorFile ? isBookmarked(bookId, anchorFile) : false;
   const [flashcardMode, setFlashcardMode] = useState(false);
   const [flashcardInitialView, setFlashcardInitialView] = useState<"cards" | "dashboard">("cards");
+  const [problemsMode, setProblemsMode] = useState(false);
 
   const toggleBookmark = useCallback(() => {
     if (!bookId || !anchorFile || !book) return;
@@ -432,7 +434,7 @@ export default function BookPage() {
 
             {/* Flashcard mode */}
             <button
-              onClick={() => { setFlashcardInitialView("cards"); setFlashcardMode(!flashcardMode); }}
+              onClick={() => { setFlashcardInitialView("cards"); setFlashcardMode(!flashcardMode); setProblemsMode(false); }}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
               style={{
                 color: flashcardMode ? "var(--accent)" : "var(--text-tertiary)",
@@ -444,6 +446,23 @@ export default function BookPage() {
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+              </svg>
+            </button>
+
+            {/* Coding problems browser */}
+            <button
+              onClick={() => { setProblemsMode(!problemsMode); setFlashcardMode(false); }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{
+                color: problemsMode ? "var(--accent)" : "var(--text-tertiary)",
+                background: problemsMode ? "var(--accent-bg)" : "transparent",
+              }}
+              onMouseEnter={(e) => !problemsMode && (e.currentTarget.style.background = "var(--bg-hover)")}
+              onMouseLeave={(e) => !problemsMode && (e.currentTarget.style.background = "transparent")}
+              title={problemsMode ? "Exit problems browser" : "Coding questions"}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
               </svg>
             </button>
 
@@ -562,6 +581,8 @@ export default function BookPage() {
             config={config || undefined}
             allFilePaths={allFiles.map((f) => f.path)}
           />
+        ) : problemsMode ? (
+          <ProblemsView files={loadedFiles} currentPath={anchorFile} />
         ) : (
           <main ref={mainRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" style={{ background: "transparent" }} tabIndex={0}>
             <div className="mx-auto max-w-2xl px-6 py-20 sm:px-8 lg:px-10 lg:py-24">
