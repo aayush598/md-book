@@ -9,9 +9,9 @@ import { parseFlashcardsFromFiles } from "@/lib/flashcards";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { fetchFileContent, type BookConfig } from "@/lib/github";
-import ChatPanel from "@/components/chat-panel";
 import TTSControls from "@/components/tts-controls";
 import { useTTS } from "@/lib/use-tts";
+import { buildStudyPrompt } from "@/lib/study-prompt";
 import toast from "react-hot-toast";
 
 class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -162,7 +162,6 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const [stats, setStats] = useState({ totalPoints: 0, longestStreak: 0, currentStreak: 0, totalCardsReviewed: 0 });
   const [contributions, setContributions] = useState<DayData[]>([]);
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const tts = useTTS();
   const [swiping, setSwiping] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -297,13 +296,12 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     if (currentIdx < totalCards - 1) {
       setCurrentIdx((p) => p + 1);
       setFlipped(false);
-      setChatOpen(false);
     }
   }, [current, currentIdx, totalCards, reviewedIds, recordReview, fetchStats, store]);
 
   const handlePrev = useCallback(() => {
     playPrevSound();
-    if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); setChatOpen(false); }
+    if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); }
   }, [currentIdx]);
 
   const handleFlip = useCallback(() => {
@@ -659,8 +657,14 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     {current.difficulty}
                   </span>
                   {current.source && <span className="text-[10px] truncate max-w-[120px]" style={{ color: "var(--text-muted)" }} title={current.source}>{current.source}</span>}
-                  <button onClick={(e) => { e.stopPropagation(); setChatOpen(true); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: chatOpen ? "var(--accent)" : "var(--text-muted)" }} title="Ask AI">
+                  <button onClick={(e) => {
+                    e.stopPropagation();
+                    const p = buildStudyPrompt({ question: current.question, answer: current.answer, source: current.source, bookName });
+                    navigator.clipboard.writeText(p).then(() => {
+                      toast.success("Prompt copied — paste it in ChatGPT");
+                    });
+                  }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy prompt for AI">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
                     </svg>
@@ -767,26 +771,6 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
         </div>
       )}
       </div>
-      {chatOpen && current && (
-        <>
-          {/* Mobile overlay backdrop */}
-          <div className="fixed inset-0 z-40 bg-black/30 sm:hidden" onClick={() => setChatOpen(false)} />
-          <div className="w-full sm:w-80 flex-shrink-0 flex flex-row fixed sm:relative bottom-0 right-0 z-50 sm:z-auto max-h-[70vh] sm:max-h-none rounded-t-2xl sm:rounded-none shadow-2xl sm:shadow-none"
-            style={{ background: "var(--bg-page)", borderLeft: "1px solid var(--border-subtle)" }}>
-            <button
-              onClick={() => setChatOpen(false)}
-              className="flex items-center justify-center w-6 self-stretch cursor-pointer transition-colors"
-              style={{ background: "var(--bg-page)", color: "var(--text-tertiary)" }}
-              title="Close sidebar"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-              </svg>
-            </button>
-            <ChatPanel question={current.question} answer={current.answer} source={current.source} bookName={bookName} onClose={() => setChatOpen(false)} />
-          </div>
-        </>
-      )}
     </div>
   );
 }

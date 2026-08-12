@@ -214,6 +214,18 @@ export default function BookPage() {
     }
   }, [bookId, anchorFile]);
 
+  // Scroll the active file's heading to the top of the reader whenever it is (re)selected
+  useEffect(() => {
+    if (!anchorFile) return;
+    const el = mainRef.current;
+    if (!el) return;
+    const target = el.querySelector(`[data-file-path="${CSS.escape(anchorFile)}"]`);
+    if (!target) return;
+    const targetRect = target.getBoundingClientRect();
+    const mainRect = el.getBoundingClientRect();
+    el.scrollTop = Math.max(0, el.scrollTop + (targetRect.top - mainRect.top));
+  }, [anchorFile, loadedFiles]);
+
   const handleScroll = useCallback(() => {
     const el = mainRef.current;
     if (!el) return;
@@ -256,7 +268,6 @@ export default function BookPage() {
         setAnchorFile(filePath);
         loadFileRange(allFiles, filePath, readingMode === "scroll" ? 2 : 1);
       }
-      if (mainRef.current) mainRef.current.scrollTop = 0;
     },
     [bookId, config, readingMode, allFiles, slug]
   );
@@ -590,7 +601,7 @@ export default function BookPage() {
               {loadedFiles.map((file, fileIndex) => {
                 const isFirst = fileIndex === 0;
                 return (
-                  <div key={file.path} className="content-section">
+                  <div key={file.path} data-file-path={file.path} className="content-section">
                     <div className={isFirst ? "mb-10 pb-8 border-b" : "mb-8 pb-6"} style={{ borderColor: "var(--border-subtle)" }}>
                       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>
                         <span>{file.chapterName}</span>
