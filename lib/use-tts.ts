@@ -62,7 +62,7 @@ export function useTTS() {
     setPaused(false);
   }, []);
 
-  const speak = useCallback((text: string) => {
+  const speak = useCallback((text: string, onEnd?: () => void) => {
     if (!text || !isSpeechSupported()) return;
     if (!voiceLoaded.current && !blockedToastShown.current) {
       blockedToastShown.current = true;
@@ -77,7 +77,7 @@ export function useTTS() {
       if (found) u.voice = found;
     }
     u.onstart = () => { setSpeaking(true); setPaused(false); };
-    u.onend = () => { setSpeaking(false); setPaused(false); };
+    u.onend = () => { setSpeaking(false); setPaused(false); if (onEnd) onEnd(); };
     u.onerror = (e) => {
       setSpeaking(false);
       setPaused(false);

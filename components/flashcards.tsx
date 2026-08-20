@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
 import type { Components } from "react-markdown";
-import { parseFlashcardsFromFiles } from "@/lib/flashcards";
+import { parseFlashcardsFromFiles, type Flashcard } from "@/lib/flashcards";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { fetchFileContent, type BookConfig } from "@/lib/github";
@@ -126,11 +126,13 @@ function MiniMarkdown({ content }: { content: string }) {
 
 const ttsText = (md: string) =>
   md
+    .replace(/```[a-zA-Z0-9+\-_.]*\n?([\s\S]*?)```/g, "$1")
     .replace(/`([^`]*)`/g, "$1")
-    .replace(/```[\s\S]*?```/g, " code ")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/#{1,6}\s+/g, "")
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{2BFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{00A0}\u2013\u2014\u2022\u2026\u00D7\u2248\u00B1\u00F7]+/gu, " ")
+    .replace(/\s+/g, " ")
     .trim();
 
 interface FlashcardsProps {
@@ -163,6 +165,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const [contributions, setContributions] = useState<DayData[]>([]);
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tts = useTTS();
+  const ttsRef = useRef(tts);
+  ttsRef.current = tts;
+  const [loopPlaying, setLoopPlaying] = useState(false);
+  const loopRef = useRef(false);
   const [swiping, setSwiping] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -266,6 +272,8 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const current = orderedCards[currentIdx] || null;
   const totalCards = orderedCards.length;
   const progress = totalCards > 0 ? ((currentIdx + 1) / totalCards) * 100 : 0;
+  const orderedCardsRef = useRef(orderedCards);
+  orderedCardsRef.current = orderedCards;
 
   const fetchStats = useCallback(async () => {
     const { getFlashcardStats, getDailyActivity } = await import("@/lib/flashcard-storage");
@@ -276,6 +284,9 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   useEffect(() => {
+    loopRef.current = false;
+    setLoopPlaying(false);
+    ttsRef.current.stop();
     setCurrentIdx(0);
     setFlipped(false);
   }, [mode, store.allowRepeat]);
@@ -285,8 +296,56 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     recordFlashcardReview(count);
   }, []);
 
+  // Continuous TTS study: speaks Q (front) → flip → A (back) → auto-advance to next card → repeat until paused
+  const stopLoop = useCallback(() => {
+    loopRef.current = false;
+    setLoopPlaying(false);
+    ttsRef.current.stop();
+  }, []);
+
+  const playCard = useCallback((idx: number, phase: "q" | "a") => {
+    if (!loopRef.current) return;
+    const card = orderedCardsRef.current[idx];
+    if (!card) { stopLoop(); return; }
+    if (phase === "q") {
+      setFlipped(false);
+      const text = ttsText(card.question);
+      const done = () => { if (loopRef.current) playCard(idx, "a"); };
+      if (!text) { setTimeout(done, 400); return; }
+      ttsRef.current.speak(text, done);
+    } else {
+      setFlipped(true);
+      const text = ttsText(card.answer);
+      const done = () => {
+        if (!loopRef.current) return;
+        const list = orderedCardsRef.current;
+        const next = list.length === 0 ? idx : idx >= list.length - 1 ? 0 : idx + 1;
+        setCurrentIdx(next);
+        if (loopRef.current) playCard(next, "q");
+      };
+      if (!text) { setTimeout(done, 400); return; }
+      ttsRef.current.speak(text, done);
+    }
+  }, [stopLoop]);
+
+  const startLoop = useCallback(() => {
+    if (!current) return;
+    if (loopPlaying) { stopLoop(); return; }
+    loopRef.current = true;
+    setLoopPlaying(true);
+    playCard(currentIdx, "q");
+  }, [current, currentIdx, loopPlaying, stopLoop, playCard]);
+
   const handleNext = useCallback(() => {
     playNextSound();
+    if (loopPlaying) {
+      if (currentIdx < totalCards - 1) {
+        const next = currentIdx + 1;
+        setCurrentIdx(next);
+        if (loopRef.current) playCard(next, "q");
+      }
+      return;
+    }
     if (current && !reviewedIds.has(current.id)) {
       setReviewedIds((prev) => { const n = new Set(prev); n.add(current.id); return n; });
       store.incrementSession();
@@ -297,27 +356,36 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
       setCurrentIdx((p) => p + 1);
       setFlipped(false);
     }
-  }, [current, currentIdx, totalCards, reviewedIds, recordReview, fetchStats, store]);
+  }, [current, currentIdx, totalCards, reviewedIds, recordReview, fetchStats, store, loopPlaying, playCard]);
 
   const handlePrev = useCallback(() => {
     playPrevSound();
+    if (loopPlaying) {
+      if (currentIdx > 0) {
+        const prev = currentIdx - 1;
+        setCurrentIdx(prev);
+        if (loopRef.current) playCard(prev, "q");
+      }
+      return;
+    }
     if (currentIdx > 0) { setCurrentIdx((p) => p - 1); setFlipped(false); }
-  }, [currentIdx]);
+  }, [currentIdx, loopPlaying, playCard]);
 
   const handleFlip = useCallback(() => {
+    if (loopPlaying) return;
     playFlipSound();
     setFlipped((p) => !p);
-  }, []);
+  }, [loopPlaying]);
 
   const handleNextRef = useRef(handleNext);
   handleNextRef.current = handleNext;
 
   useEffect(() => {
-    if (store.autoFlip && flipped) {
+    if (store.autoFlip && flipped && !loopPlaying) {
       autoFlipTimer.current = setTimeout(() => handleNextRef.current(), 3000);
       return () => { if (autoFlipTimer.current) clearTimeout(autoFlipTimer.current); };
     }
-  }, [store.autoFlip, flipped]);
+  }, [store.autoFlip, flipped, loopPlaying]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === " " || e.key === "Enter") { e.preventDefault(); handleFlip(); }
@@ -598,7 +666,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           onToggle={tts.toggleEnabled}
           onSetSpeed={tts.setSpeed}
           onSetVoice={tts.setSelectedVoice}
-          onStop={tts.stop}
+          onStop={() => { loopRef.current = false; setLoopPlaying(false); tts.stop(); }}
           onPause={tts.pause}
           onResume={tts.resume}
         />
@@ -669,8 +737,8 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
                     </svg>
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); tts.speak(ttsText(current.question)); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
+                  <button onClick={(e) => { e.stopPropagation(); if (loopPlaying) stopLoop(); else startLoop(); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                     </svg>
@@ -695,8 +763,8 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
                   </svg>
                   <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
-                  <button onClick={(e) => { e.stopPropagation(); tts.speak(ttsText(current.answer)); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: tts.speaking ? "var(--accent)" : "var(--text-muted)" }} title="Read aloud">
+                  <button onClick={(e) => { e.stopPropagation(); if (loopPlaying) stopLoop(); else startLoop(); }}
+                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                     </svg>
