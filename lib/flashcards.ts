@@ -73,8 +73,8 @@ function extractAnswerBlock(src: string, startIdx: number): string {
 // Format A: ## Q1: <question>  or  ### Q1: <question>\n**A:** <answer>
 const FORMAT_A = /^#{2,3}\s+Q(\d*)\s*[:\.\)]\s+(.+?)$/gm;
 
-// Format B: **Q1: <question>**\nA: <answer>
-const FORMAT_B = /^\*\*Q(\d*):\s*(.+?)\*\*$/gm;
+// Format B: **Q1: <question>**\nA: <answer>   (trailing whitespace tolerated, e.g. markdown hard breaks)
+const FORMAT_B = /^\*\*Q(\d*):\s*(.+?)\*\*[ \t]*$/gm;
 
 // Format C: ### Q: "<question>"\n**<label>:**\n<answer>
 const FORMAT_C = /^###\s+Q:\s+"(.+?)"\s*$/gm;
