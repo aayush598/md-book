@@ -15,6 +15,10 @@ import ReadingControls from "@/components/reading-controls";
 import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
 import ProblemsView from "@/components/problems-view";
+import TTSControls from "@/components/tts-controls";
+import { useTTS } from "@/lib/use-tts";
+import { splitBlocks, ttsText, isHeadingBlock } from "@/lib/tts";
+import SpokenText from "@/components/spoken-text";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { saveProject as saveEbookProject } from "@/lib/ebook-storage";
 import { defaultTheme } from "@/lib/ebook-theme";
@@ -223,8 +227,16 @@ export default function BookPage() {
     if (!target) return;
     const targetRect = target.getBoundingClientRect();
     const mainRect = el.getBoundingClientRect();
+    // Bypass CSS smooth-scroll so opening a book doesn't visibly slide
+    el.style.scrollBehavior = "auto";
     el.scrollTop = Math.max(0, el.scrollTop + (targetRect.top - mainRect.top));
+    requestAnimationFrame(() => { el.style.scrollBehavior = ""; });
   }, [anchorFile, loadedFiles]);
+
+  // Reset any window-level scroll carried over from the previous page
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleScroll = useCallback(() => {
     const el = mainRef.current;
@@ -278,6 +290,75 @@ export default function BookPage() {
   const [flashcardMode, setFlashcardMode] = useState(false);
   const [flashcardInitialView, setFlashcardInitialView] = useState<"cards" | "dashboard">("cards");
   const [problemsMode, setProblemsMode] = useState(false);
+
+  // ---- Reader TTS (listen to the chapter, with per-block highlighting) ----
+  const readerTts = useTTS();
+  const readerTtsRef = useRef(readerTts);
+  readerTtsRef.current = readerTts;
+  const [readerTtsOn, setReaderTtsOn] = useState(false);
+  const [ttsPos, setTtsPos] = useState<{ fileIdx: number; blockIdx: number; charStart: number } | null>(null);
+  const ttsSeqOnRef = useRef(false);
+  const ttsRunIdRef = useRef(0);
+
+  const fileBlocks = useMemo(() => loadedFiles.map((f) => splitBlocks(f.content)), [loadedFiles]);
+  const fileBlocksRef = useRef(fileBlocks);
+  fileBlocksRef.current = fileBlocks;
+
+  const stopReaderTts = useCallback(() => {
+    ttsRunIdRef.current += 1;
+    ttsSeqOnRef.current = false;
+    setReaderTtsOn(false);
+    setTtsPos(null);
+    readerTtsRef.current.stop();
+  }, []);
+
+  const speakFrom = useCallback((fileIdx: number, blockIdx: number, runId: number) => {
+    if (!ttsSeqOnRef.current || runId !== ttsRunIdRef.current) return;
+    const blocks = fileBlocksRef.current[fileIdx];
+    if (!blocks || blockIdx >= blocks.length) {
+      if (fileIdx + 1 < fileBlocksRef.current.length) { speakFrom(fileIdx + 1, 0, runId); return; }
+      stopReaderTts();
+      return;
+    }
+    setTtsPos({ fileIdx, blockIdx, charStart: -1 });
+    const text = ttsText(blocks[blockIdx]);
+    const done = () => speakFrom(fileIdx, blockIdx + 1, runId);
+    const onBoundary = (ci: number) => {
+      setTtsPos((prev) =>
+        prev && prev.fileIdx === fileIdx && prev.blockIdx === blockIdx
+          ? { ...prev, charStart: ci }
+          : prev
+      );
+    };
+    if (!text) { setTimeout(done, 120); return; }
+    readerTtsRef.current.speak(text, done, onBoundary);
+  }, [stopReaderTts]);
+
+  const startReaderTts = useCallback((fileIdx: number, blockIdx: number) => {
+    readerTtsRef.current.stop();
+    ttsRunIdRef.current += 1;
+    const runId = ttsRunIdRef.current;
+    ttsSeqOnRef.current = true;
+    setReaderTtsOn(true);
+    speakFrom(fileIdx, blockIdx, runId);
+  }, [speakFrom]);
+
+  // Keep the block being spoken in view
+  useEffect(() => {
+    if (!ttsPos) return;
+    const el = document.querySelector(`[data-tts-block="${ttsPos.fileIdx}:${ttsPos.blockIdx}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [ttsPos]);
+
+  // Stop reading when leaving the page content (chapter switch, mode toggles)
+  useEffect(() => {
+    stopReaderTts();
+  }, [anchorFile, flashcardMode, problemsMode, readingMode, stopReaderTts]);
+
+  useEffect(() => () => {
+    ttsSeqOnRef.current = false;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
 
   const toggleBookmark = useCallback(() => {
     if (!bookId || !anchorFile || !book) return;
@@ -411,13 +492,13 @@ export default function BookPage() {
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
               </svg>
-              Books
+              <span className="hidden sm:inline">Books</span>
             </Link>
-            <span style={{ color: "var(--text-muted)" }} className="text-xs">/</span>
-            <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{book.name}</span>
+            <span style={{ color: "var(--text-muted)" }} className="hidden sm:inline text-xs">/</span>
+            <span className="truncate text-sm font-medium min-w-0" style={{ color: "var(--text-primary)" }}>{book.name}</span>
             <button
               onClick={handleEditInDesigner}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all shrink-0"
               style={{ color: "var(--accent)", background: "var(--accent-bg)" }}
               onMouseEnter={(e) => e.currentTarget.style.background = "var(--accent-glow)"}
               onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-bg)"}
@@ -426,15 +507,15 @@ export default function BookPage() {
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
               </svg>
-              Edit
+              <span className="hidden sm:inline">Edit</span>
             </button>
           </div>
 
-          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Dashboard */}
             <button
               onClick={() => { setFlashcardInitialView("dashboard"); setFlashcardMode(true); }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-all"
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-lg transition-all"
               style={{ color: "var(--accent)", background: "var(--accent-bg)" }}
               title="Flashcard Dashboard"
             >
@@ -508,7 +589,7 @@ export default function BookPage() {
             </button>
 
             {currentIdx !== -1 && (
-              <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text-tertiary)" }}>
+              <div className="flex items-center gap-1 text-xs font-medium shrink-0" style={{ color: "var(--text-tertiary)" }}>
                 <span className="flex h-6 min-w-[20px] items-center justify-center rounded-md px-1" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                   {currentIdx + 1}
                 </span>
@@ -534,10 +615,31 @@ export default function BookPage() {
               </svg>
             </button>
 
+            {/* Listen to chapter (TTS) */}
+            <button
+              onClick={() => {
+                if (readerTtsOn) { stopReaderTts(); return; }
+                const fileIdx = Math.max(0, loadedFiles.findIndex((f) => f.path === anchorFile));
+                startReaderTts(fileIdx, 0);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{
+                color: readerTtsOn ? "var(--accent)" : "var(--text-tertiary)",
+                background: readerTtsOn ? "var(--accent-bg)" : "transparent",
+              }}
+              onMouseEnter={(e) => !readerTtsOn && (e.currentTarget.style.background = "var(--bg-hover)")}
+              onMouseLeave={(e) => !readerTtsOn && (e.currentTarget.style.background = "transparent")}
+              title={readerTtsOn ? "Stop reading aloud" : "Listen to this chapter"}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+              </svg>
+            </button>
+
             {/* Sound toggle */}
             <button
               onClick={toggleSound}
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
               style={{ color: "var(--text-tertiary)" }}
               onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
               onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
@@ -618,7 +720,36 @@ export default function BookPage() {
                     </div>
 
                     <div style={{ "--reader-font-size": getFontSizePx(), "--reader-line-height": lineHeight } as React.CSSProperties}>
-                      <MarkdownViewer content={file.content} enableDropcap={isFirst} />
+                      {fileBlocks[fileIndex].map((block, bi) => {
+                        const pos = ttsPos;
+                        const active = pos !== null && pos.fileIdx === fileIndex && pos.blockIdx === bi;
+                        const heading = isHeadingBlock(block);
+                        return (
+                          <div
+                            key={bi}
+                            data-tts-block={`${fileIndex}:${bi}`}
+                            className={`tts-reader-block${active ? " tts-block-active" : ""}${heading ? " tts-heading-block" : ""}`}
+                          >
+                            {heading && (
+                              <button
+                                onClick={() => startReaderTts(fileIndex, bi)}
+                                className="tts-play-from"
+                                title="Listen from here"
+                                aria-label="Listen from this section"
+                              >
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                                </svg>
+                              </button>
+                            )}
+                            {active ? (
+                              <SpokenText text={ttsText(block)} charIndex={pos.charStart} />
+                            ) : (
+                              <MarkdownViewer content={block} enableDropcap={isFirst && bi === 0} />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {fileIndex < loadedFiles.length - 1 && (
@@ -734,6 +865,30 @@ export default function BookPage() {
         )}
       </div>
 
+      {readerTtsOn && (
+        <div className="fixed bottom-24 right-4 sm:right-6 z-50 flex items-center gap-2 rounded-xl px-3 py-2 shadow-lg max-w-[calc(100vw-2rem)] flex-wrap"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+          <span className="flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap" style={{ color: "var(--accent)" }}>
+            <span className="tts-live-dot" />
+            Reading aloud
+          </span>
+          <TTSControls
+            enabled={readerTts.enabled}
+            speaking={readerTts.speaking}
+            paused={readerTts.paused}
+            speed={readerTts.speed}
+            voices={readerTts.voices}
+            selectedVoice={readerTts.selectedVoice}
+            onToggle={readerTts.toggleEnabled}
+            onSetSpeed={readerTts.setSpeed}
+            onSetVoice={readerTts.setSelectedVoice}
+            onStop={stopReaderTts}
+            onPause={readerTts.pause}
+            onResume={readerTts.resume}
+          />
+        </div>
+      )}
+
       {showBackToTop && (
         <button
           onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
@@ -746,7 +901,7 @@ export default function BookPage() {
         </button>
       )}
 
-      <div className="fixed bottom-6 left-6 z-50 hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] shadow-sm"
+      <div className={`fixed bottom-6 left-6 z-30 hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] shadow-sm pointer-events-none transition-opacity duration-200 ${sidebarOpen ? "opacity-0" : "opacity-100"}`}
            style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)", border: "1px solid var(--border-subtle)" }}>
         <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>B</kbd>
         <span>sidebar</span>

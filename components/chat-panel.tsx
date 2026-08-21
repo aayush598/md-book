@@ -1,6 +1,6 @@
 "use client";
 
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import AnswerRenderer from "@/components/answer-renderer";
 import { buildStudyPrompt } from "@/lib/study-prompt";
 

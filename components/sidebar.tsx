@@ -283,12 +283,16 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
 
   const navRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to active file
+  // Auto-scroll to active file (scoped to the nav container so the window never scrolls)
   useEffect(() => {
-    if (!navRef.current || !currentFile) return;
-    const active = navRef.current.querySelector('[data-active="true"]');
-    if (active) {
-      active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const nav = navRef.current;
+    if (!nav || !currentFile) return;
+    const active = nav.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (!active) return;
+    const navRect = nav.getBoundingClientRect();
+    const rect = active.getBoundingClientRect();
+    if (rect.top < navRect.top || rect.bottom > navRect.bottom) {
+      nav.scrollTop += rect.top - navRect.top - nav.clientHeight / 2 + rect.height / 2;
     }
   }, [currentFile, expanded]);
 

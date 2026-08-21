@@ -6,13 +6,15 @@ import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
 import type { Components } from "react-markdown";
 import { parseFlashcardsFromFiles, type Flashcard } from "@/lib/flashcards";
+import { splitBlocks, ttsText } from "@/lib/tts";
+import SpokenText from "@/components/spoken-text";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { fetchFileContent, type BookConfig } from "@/lib/github";
 import TTSControls from "@/components/tts-controls";
 import { useTTS } from "@/lib/use-tts";
 import { buildStudyPrompt } from "@/lib/study-prompt";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -124,16 +126,123 @@ function MiniMarkdown({ content }: { content: string }) {
   );
 }
 
-const ttsText = (md: string) =>
-  md
-    .replace(/```[a-zA-Z0-9+\-_.]*\n?([\s\S]*?)```/g, "$1")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/#{1,6}\s+/g, "")
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{2BFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{00A0}\u2013\u2014\u2022\u2026\u00D7\u2248\u00B1\u00F7]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Renders markdown as blocks; the block currently being spoken shows
+// word-level highlight tracking, other blocks render as normal markdown.
+function TrackedContent({ content, activeBlock, boundaryChar, center }: { content: string; activeBlock: number; boundaryChar: number; center?: boolean }) {
+  const blocks = useMemo(() => splitBlocks(content), [content]);
+  const activeRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (activeBlock >= 0 && activeRef.current) {
+      activeRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [activeBlock]);
+
+  return (
+    <div className={center ? "text-center" : ""}>
+      {blocks.map((b, i) => (
+        <div key={i} ref={i === activeBlock ? activeRef : undefined} className={`tts-block${i === activeBlock ? " tts-block-active" : ""}`}>
+          {i === activeBlock ? (
+            <SpokenText text={ttsText(b)} charIndex={boundaryChar} />
+          ) : (
+            <MiniMarkdown content={b} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QuestionFace({ card, bookName, loopPlaying, onStartStop, activeBlock, boundaryChar }: {
+  card: Flashcard; bookName?: string; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
+          style={{ background: card.difficulty === "hard" ? "rgba(239,68,68,0.1)" : card.difficulty === "medium" ? "rgba(234,179,8,0.1)" : "rgba(34,197,94,0.1)", color: card.difficulty === "hard" ? "#ef4444" : card.difficulty === "medium" ? "#eab308" : "#22c55e" }}>
+          {card.difficulty}
+        </span>
+        {card.source && <span className="text-[10px] truncate max-w-[120px]" style={{ color: "var(--text-muted)" }} title={card.source}>{card.source}</span>}
+        <button onClick={(e) => {
+          e.stopPropagation();
+          const p = buildStudyPrompt({ question: card.question, answer: card.answer, source: card.source, bookName });
+          navigator.clipboard.writeText(p).then(() => {
+            toast.success("Prompt copied — paste it in ChatGPT");
+          });
+        }}
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy prompt for AI">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+          </svg>
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onStartStop(); }}
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+          </svg>
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${card.question}\nA: ${card.answer}`); toast.success("Copied"); }}
+          className="ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center overflow-y-auto">
+        <div className="w-full text-base font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>
+          <TrackedContent content={card.question} activeBlock={activeBlock} boundaryChar={boundaryChar} center />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AnswerFace({ card, loopPlaying, onStartStop, activeBlock, boundaryChar }: {
+  card: Flashcard; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-4">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--accent)" }}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+        </svg>
+        <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
+        <button onClick={(e) => { e.stopPropagation(); onStartStop(); }}
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+          </svg>
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${card.question}\nA: ${card.answer}`); toast.success("Copied"); }}
+          className="ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto flashcard-answer">
+        <div className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+          <TrackedContent content={card.answer} activeBlock={activeBlock} boundaryChar={boundaryChar} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SwipeIndicator({ swipeOffset, threshold }: { swipeOffset: number; threshold: number }) {
+  return (
+    <div className="absolute inset-y-0 flex items-center z-10 pointer-events-none"
+      style={{ [swipeOffset > 0 ? "left" : "right"]: 12, opacity: Math.min(1, Math.abs(swipeOffset) / threshold) } as React.CSSProperties}>
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--text-muted)" }}>
+        {swipeOffset > 0
+          ? <><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></>
+          : <><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></>
+        }
+      </svg>
+    </div>
+  );
+}
 
 interface FlashcardsProps {
   files: { path: string; content: string }[];
@@ -169,9 +278,22 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   ttsRef.current = tts;
   const [loopPlaying, setLoopPlaying] = useState(false);
   const loopRef = useRef(false);
+  const [ttsLoc, setTtsLoc] = useState<{ idx: number; phase: "q" | "a"; blockIdx: number; charStart: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    // Single-face rendering for touch devices AND small screens — the 3D flip
+    // is unreliable on mobile browsers (backface/preserve-3d glitches).
+    const mq = window.matchMedia("(hover: none), (max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [swiping, setSwiping] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
   const [allFileContents, setAllFileContents] = useState<{ path: string; content: string }[] | null>(null);
   const [allLoading, setAllLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -296,36 +418,41 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     recordFlashcardReview(count);
   }, []);
 
-  // Continuous TTS study: speaks Q (front) → flip → A (back) → auto-advance to next card → repeat until paused
-  const stopLoop = useCallback(() => {
+  // Continuous TTS study: speaks Q (front) → flip → A (back) → auto-advance to next card → repeat until paused.
+// Speaks block-by-block so the UI can highlight the text currently being read.
+const stopLoop = useCallback(() => {
     loopRef.current = false;
     setLoopPlaying(false);
+    setTtsLoc(null);
     ttsRef.current.stop();
   }, []);
 
-  const playCard = useCallback((idx: number, phase: "q" | "a") => {
+  const playCard = useCallback((idx: number, phase: "q" | "a", blockIdx = 0) => {
     if (!loopRef.current) return;
     const card = orderedCardsRef.current[idx];
     if (!card) { stopLoop(); return; }
-    if (phase === "q") {
-      setFlipped(false);
-      const text = ttsText(card.question);
-      const done = () => { if (loopRef.current) playCard(idx, "a"); };
-      if (!text) { setTimeout(done, 400); return; }
-      ttsRef.current.speak(text, done);
-    } else {
-      setFlipped(true);
-      const text = ttsText(card.answer);
-      const done = () => {
-        if (!loopRef.current) return;
-        const list = orderedCardsRef.current;
-        const next = list.length === 0 ? idx : idx >= list.length - 1 ? 0 : idx + 1;
-        setCurrentIdx(next);
-        if (loopRef.current) playCard(next, "q");
-      };
-      if (!text) { setTimeout(done, 400); return; }
-      ttsRef.current.speak(text, done);
+    const blocks = splitBlocks(phase === "q" ? card.question : card.answer);
+    if (blockIdx >= blocks.length) {
+      if (phase === "q") { playCard(idx, "a", 0); return; }
+      const list = orderedCardsRef.current;
+      const next = list.length === 0 ? idx : idx >= list.length - 1 ? 0 : idx + 1;
+      setCurrentIdx(next);
+      if (loopRef.current) playCard(next, "q", 0);
+      return;
     }
+    setFlipped(phase === "a");
+    setTtsLoc({ idx, phase, blockIdx, charStart: -1 });
+    const text = ttsText(blocks[blockIdx]);
+    const done = () => { if (loopRef.current) playCard(idx, phase, blockIdx + 1); };
+    const onBoundary = (ci: number) => {
+      setTtsLoc((prev) =>
+        prev && prev.idx === idx && prev.phase === phase && prev.blockIdx === blockIdx
+          ? { ...prev, charStart: ci }
+          : prev
+      );
+    };
+    if (!text) { setTimeout(done, 120); return; }
+    ttsRef.current.speak(text, done, onBoundary);
   }, [stopLoop]);
 
   const startLoop = useCallback(() => {
@@ -372,10 +499,9 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   }, [currentIdx, loopPlaying, playCard]);
 
   const handleFlip = useCallback(() => {
-    if (loopPlaying) return;
     playFlipSound();
     setFlipped((p) => !p);
-  }, [loopPlaying]);
+  }, []);
 
   const handleNextRef = useRef(handleNext);
   handleNextRef.current = handleNext;
@@ -398,6 +524,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    suppressClickRef.current = false;
     setSwiping(true);
     setSwipeOffset(0);
   }, []);
@@ -405,7 +532,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!swipeStart.current) return;
     const dx = e.touches[0].clientX - swipeStart.current.x;
-    setSwipeOffset(dx);
+    const dy = e.touches[0].clientY - swipeStart.current.y;
+    // Only track horizontal drags so vertical scrolling stays natural
+    if (Math.abs(dx) > Math.abs(dy)) setSwipeOffset(dx);
+    else setSwipeOffset(0);
   }, []);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
@@ -416,10 +546,33 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     setSwipeOffset(0);
     swipeStart.current = null;
     if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      suppressClickRef.current = true;
       if (dx > 0) handlePrev();
       else handleNext();
+      return;
     }
-  }, [handleNext, handlePrev]);
+    // Tap: flip directly from the touch handler — synthetic clicks are
+    // unreliable on mobile, which previously broke tap-to-flip.
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      suppressClickRef.current = true;
+      handleFlip();
+    }
+  }, [handleNext, handlePrev, handleFlip]);
+
+  const handleCardClick = useCallback(() => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    handleFlip();
+  }, [handleFlip]);
+
+  const toggleLoop = useCallback(() => {
+    if (loopPlaying) stopLoop();
+    else startLoop();
+  }, [loopPlaying, stopLoop, startLoop]);
+
+  const qActiveBlock = loopPlaying && ttsLoc && ttsLoc.idx === currentIdx && ttsLoc.phase === "q" ? ttsLoc.blockIdx : -1;
+  const aActiveBlock = loopPlaying && ttsLoc && ttsLoc.idx === currentIdx && ttsLoc.phase === "a" ? ttsLoc.blockIdx : -1;
+  const qBoundary = qActiveBlock >= 0 && ttsLoc ? ttsLoc.charStart : -1;
+  const aBoundary = aActiveBlock >= 0 && ttsLoc ? ttsLoc.charStart : -1;
 
   const reshuffle = useCallback(() => {
     setShuffledSeed(Math.floor(Math.random() * 100000));
@@ -592,7 +745,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             </svg>
             Dashboard
           </button>
-          <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--text-tertiary)" }}>
+          <div className="hidden sm:flex items-center gap-1.5 text-xs" style={{ color: "var(--text-tertiary)" }}>
             <span className="font-medium" style={{ color: "var(--text-secondary)" }}>+{store.sessionCards * 10}</span> pts
           </div>
         </div>
@@ -600,11 +753,11 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
 
       {/* Controls bar */}
       <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-sidebar)" }}>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Scope</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:inline text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Scope</span>
           {(["current", "all"] as const).map((s) => (
             <button key={s} onClick={() => { store.setScope(s); }}
-              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${store.scope === s ? "shadow-sm" : ""}`}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all whitespace-nowrap ${store.scope === s ? "shadow-sm" : ""}`}
               style={{ background: store.scope === s ? "var(--accent-bg)" : "var(--bg-hover)", color: store.scope === s ? "var(--accent)" : "var(--text-tertiary)" }}>
               {s === "current" ? "Current file" : "All files"}
             </button>
@@ -612,28 +765,28 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           {allLoading && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{allFileContents ? allFileContents.length : 0}/{allFilePaths?.length || 0} files...</span>}
           {fetchError && <span className="text-[11px]" style={{ color: "#ef4444" }}>{fetchError}</span>}
         </div>
-        <div className="w-px h-5" style={{ background: "var(--border-subtle)" }} />
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Order</span>
+        <div className="w-px h-5 shrink-0" style={{ background: "var(--border-subtle)" }} />
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:inline text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Order</span>
           {(["sequential", "random"] as const).map((m) => (
             <button key={m} onClick={() => { setMode(m); toast.success(`${m} mode`); }}
-              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${mode === m ? "shadow-sm" : ""}`}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all whitespace-nowrap ${mode === m ? "shadow-sm" : ""}`}
               style={{ background: mode === m ? "var(--accent-bg)" : "var(--bg-hover)", color: mode === m ? "var(--accent)" : "var(--text-tertiary)" }}>
               {m.charAt(0).toUpperCase() + m.slice(1)}
             </button>
           ))}
         </div>
-        <div className="w-px h-5" style={{ background: "var(--border-subtle)" }} />
-        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer" style={{ color: "var(--text-tertiary)" }}>
+        <div className="w-px h-5 shrink-0" style={{ background: "var(--border-subtle)" }} />
+        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer shrink-0 whitespace-nowrap" style={{ color: "var(--text-tertiary)" }}>
           <input type="checkbox" checked={store.allowRepeat} onChange={(e) => store.setAllowRepeat(e.target.checked)} className="rounded" />
           Repeat
         </label>
-        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer" style={{ color: "var(--text-tertiary)" }}>
+        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer shrink-0 whitespace-nowrap" style={{ color: "var(--text-tertiary)" }}>
           <input type="checkbox" checked={store.autoFlip} onChange={(e) => store.setAutoFlip(e.target.checked)} className="rounded" />
           Auto-flip
         </label>
         {mode === "random" && (
-          <button onClick={reshuffle} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all"
+          <button onClick={reshuffle} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap"
             style={{ color: "var(--text-tertiary)", background: "var(--bg-hover)" }} title="Reshuffle cards">
             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
@@ -641,7 +794,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             Reshuffle
           </button>
         )}
-        <button onClick={toggleSound} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all"
+        <button onClick={toggleSound} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap"
           style={{ color: soundMuted ? "var(--text-muted)" : "var(--accent)", background: "var(--bg-hover)" }}
           title={soundMuted ? "Unmute sounds" : "Mute sounds"}>
           {soundMuted ? (
@@ -656,20 +809,22 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           )}
           <span>{soundMuted ? "Muted" : "Sound"}</span>
         </button>
-        <TTSControls
-          enabled={tts.enabled}
-          speaking={tts.speaking}
-          paused={tts.paused}
-          speed={tts.speed}
-          voices={tts.voices}
-          selectedVoice={tts.selectedVoice}
-          onToggle={tts.toggleEnabled}
-          onSetSpeed={tts.setSpeed}
-          onSetVoice={tts.setSelectedVoice}
-          onStop={() => { loopRef.current = false; setLoopPlaying(false); tts.stop(); }}
-          onPause={tts.pause}
-          onResume={tts.resume}
-        />
+        <div className="shrink-0">
+          <TTSControls
+            enabled={tts.enabled}
+            speaking={tts.speaking}
+            paused={tts.paused}
+            speed={tts.speed}
+            voices={tts.voices}
+            selectedVoice={tts.selectedVoice}
+            onToggle={tts.toggleEnabled}
+            onSetSpeed={tts.setSpeed}
+            onSetVoice={tts.setSelectedVoice}
+            onStop={() => { loopRef.current = false; setLoopPlaying(false); setTtsLoc(null); tts.stop(); }}
+            onPause={tts.pause}
+            onResume={tts.resume}
+          />
+        </div>
       </div>
 
       {/* Main content area */}
@@ -686,7 +841,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
           </div>
         </div>
       ) : current ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-8">
+        <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-8 overflow-y-auto">
           <div className="w-full max-w-xl mb-6">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-medium" style={{ color: "var(--text-tertiary)" }}>{currentIdx + 1} / {totalCards}</span>
@@ -697,92 +852,42 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             </div>
           </div>
 
-          <div className="w-full max-w-xl perspective cursor-pointer select-none" onClick={handleFlip}
+          <div className={`w-full max-w-xl cursor-pointer select-none ${isMobile ? "" : "perspective"}`} onClick={handleCardClick}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}>
-            <div className={`relative w-full min-h-[280px] transition-transform duration-500 preserve-3d ${flipped ? "rotate-y-180" : ""}`}
-              style={{
-                transformStyle: "preserve-3d",
-                ...(swiping ? { transition: "none", transform: `translateX(${swipeOffset}px) rotateY(${flipped ? 180 : 0}deg)` } : {}),
-              }}>
-              {swiping && (
-                <div className="absolute inset-y-0 flex items-center z-10 pointer-events-none"
-                  style={{ [swipeOffset > 0 ? "left" : "right"]: 12, opacity: Math.min(1, Math.abs(swipeOffset) / SWIPE_THRESHOLD) }}>
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--text-muted)" }}>
-                    {swipeOffset > 0
-                      ? <><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></>
-                      : <><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></>
-                    }
-                  </svg>
+            onTouchEnd={handleTouchEnd}
+            style={{ touchAction: "pan-y" }}>
+            {isMobile ? (
+              <div className="relative w-full min-h-[300px] max-h-[65vh] rounded-2xl p-4 flex flex-col shadow-sm border transition-transform duration-200"
+                style={{
+                  background: "var(--bg-elevated)",
+                  borderColor: "var(--border-subtle)",
+                  ...(swiping ? { transition: "none", transform: `translateX(${swipeOffset}px)` } : {}),
+                }}>
+                {swiping && <SwipeIndicator swipeOffset={swipeOffset} threshold={SWIPE_THRESHOLD} />}
+                {flipped ? (
+                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} />
+                ) : (
+                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} />
+                )}
+              </div>
+            ) : (
+              <div className={`relative w-full min-h-[280px] transition-transform duration-500 preserve-3d ${flipped ? "rotate-y-180" : ""}`}
+                style={{
+                  transformStyle: "preserve-3d",
+                  ...(swiping ? { transition: "none", transform: `translateX(${swipeOffset}px) rotateY(${flipped ? 180 : 0}deg)` } : {}),
+                }}>
+                {swiping && <SwipeIndicator swipeOffset={swipeOffset} threshold={SWIPE_THRESHOLD} />}
+                <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border"
+                  style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
+                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} />
                 </div>
-              )}
-              <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border"
-                style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
-                    style={{ background: current.difficulty === "hard" ? "rgba(239,68,68,0.1)" : current.difficulty === "medium" ? "rgba(234,179,8,0.1)" : "rgba(34,197,94,0.1)", color: current.difficulty === "hard" ? "#ef4444" : current.difficulty === "medium" ? "#eab308" : "#22c55e" }}>
-                    {current.difficulty}
-                  </span>
-                  {current.source && <span className="text-[10px] truncate max-w-[120px]" style={{ color: "var(--text-muted)" }} title={current.source}>{current.source}</span>}
-                  <button onClick={(e) => {
-                    e.stopPropagation();
-                    const p = buildStudyPrompt({ question: current.question, answer: current.answer, source: current.source, bookName });
-                    navigator.clipboard.writeText(p).then(() => {
-                      toast.success("Prompt copied — paste it in ChatGPT");
-                    });
-                  }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy prompt for AI">
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                    </svg>
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); if (loopPlaying) stopLoop(); else startLoop(); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                    </svg>
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex-1 flex items-center justify-center overflow-y-auto">
-                  <div className="text-base font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>
-                    <MiniMarkdown content={current.question} />
-                  </div>
+                <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border rotate-y-180"
+                  style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
+                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} />
                 </div>
               </div>
-              <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border rotate-y-180"
-                style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--accent)" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-                  </svg>
-                  <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Answer</span>
-                  <button onClick={(e) => { e.stopPropagation(); if (loopPlaying) stopLoop(); else startLoop(); }}
-                    className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: loopPlaying ? "var(--accent)" : "var(--text-muted)" }} title={loopPlaying ? "Stop reading" : "Read question & answer in a loop"}>
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                    </svg>
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`Q: ${current.question}\nA: ${current.answer}`); toast.success("Copied"); }}
-                    className="ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }} title="Copy Q&A">
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto flashcard-answer">
-                  <div className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                    <MiniMarkdown content={current.answer} />
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 mt-6 sm:mt-8 flex-wrap justify-center">
@@ -811,11 +916,13 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
             </button>
           </div>
 
-          <div className="mt-6 flex items-center gap-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
+          <div className="mt-6 hidden sm:flex items-center gap-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>Space</kbd> flip</span>
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>←</kbd> <kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>→</kbd> navigate</span>
             <span><kbd className="rounded border px-1 py-0.5 font-mono" style={{ borderColor: "var(--border-default)", background: "var(--bg-hover)" }}>D</kbd> dashboard</span>
-            <span>Swipe ← →</span>
+          </div>
+          <div className="mt-6 sm:hidden text-[10px] text-center" style={{ color: "var(--text-muted)" }}>
+            Tap card to flip &middot; Swipe &larr; &rarr; for previous / next
           </div>
         </div>
       ) : (

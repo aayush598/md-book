@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export interface TTSVoice {
   name: string;
@@ -62,7 +62,7 @@ export function useTTS() {
     setPaused(false);
   }, []);
 
-  const speak = useCallback((text: string, onEnd?: () => void) => {
+  const speak = useCallback((text: string, onEnd?: () => void, onBoundary?: (charIndex: number) => void) => {
     if (!text || !isSpeechSupported()) return;
     if (!voiceLoaded.current && !blockedToastShown.current) {
       blockedToastShown.current = true;
@@ -78,10 +78,15 @@ export function useTTS() {
     }
     u.onstart = () => { setSpeaking(true); setPaused(false); };
     u.onend = () => { setSpeaking(false); setPaused(false); if (onEnd) onEnd(); };
+    u.onboundary = (e) => {
+      // "sentence" events are skipped; missing name is treated as a word event
+      if (onBoundary && e.name !== "sentence") onBoundary(e.charIndex);
+    };
     u.onerror = (e) => {
       setSpeaking(false);
       setPaused(false);
-      if (e.error !== "canceled") toast.error("TTS error: " + e.error);
+      // "interrupted"/"canceled" are expected when we deliberately stop or replace speech
+      if (e.error !== "canceled" && e.error !== "interrupted") toast.error("TTS error: " + e.error);
     };
     utteranceRef.current = u;
     try {
