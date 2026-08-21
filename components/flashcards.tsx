@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
 import type { Components } from "react-markdown";
 import { parseFlashcardsFromFiles, type Flashcard } from "@/lib/flashcards";
-import { splitBlocks, ttsText } from "@/lib/tts";
+import { splitBlocks, ttsText, isCodeBlock, codeLines } from "@/lib/tts";
 import SpokenText from "@/components/spoken-text";
 import { useFlashcardStore } from "@/lib/stores/flashcard-store";
 import { playFlipSound, playNextSound, playPrevSound, isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
@@ -39,20 +39,23 @@ class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { 
   }
 }
 
-function MiniCode({ className, children }: any) {
+function MiniCode({ className, children, highlightLine }: any) {
   const langMatch = /language-([\w+-]+)/.exec(className || "");
   const langName = langMatch ? langMatch[1].toLowerCase() : "";
 
-  const html = useMemo(() => {
+  // Highlighted per-line so the TTS-tracked line can be styled independently
+  const lines = useMemo(() => {
     const text = String(children).replace(/\n$/, "");
-    try {
-      if (langName && hljs.getLanguage(langName)) {
-        return hljs.highlight(text, { language: langName, ignoreIllegals: true }).value;
+    return text.split("\n").map((line) => {
+      try {
+        if (langName && hljs.getLanguage(langName)) {
+          return hljs.highlight(line, { language: langName, ignoreIllegals: true }).value;
+        }
+        return hljs.highlightAuto(line).value;
+      } catch {
+        return line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       }
-      return hljs.highlightAuto(text).value;
-    } catch {
-      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    }
+    });
   }, [children, langName]);
 
   return (
@@ -70,80 +73,105 @@ function MiniCode({ className, children }: any) {
         fontFamily: "var(--font-mono), monospace",
       }}
     >
-      <code className="hljs" style={{ background: "transparent", padding: 0, color: "inherit", fontFamily: "inherit" }} dangerouslySetInnerHTML={{ __html: html }} />
+      <code className="hljs" style={{ background: "transparent", padding: 0, color: "inherit", fontFamily: "inherit" }}>
+        {lines.map((html, i) => (
+          <span
+            key={i}
+            className={i === highlightLine ? "tts-code-line-active" : undefined}
+            dangerouslySetInnerHTML={{ __html: html || "&#8203;" }}
+          />
+        ))}
+      </code>
     </pre>
   );
 }
 
-const miniComponents: Components = {
-  pre: ({ children }) => <>{children}</>,
-  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-  h1: ({ children }) => <p className="mb-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
-  h2: ({ children }) => <p className="mb-2 text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
-  h3: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
-  h4: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
-  blockquote: ({ children }) => (
-    <blockquote className="mb-2 border-l-2 pl-3" style={{ borderColor: "var(--accent)", color: "var(--text-secondary)" }}>{children}</blockquote>
-  ),
-  strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
-  em: ({ children }) => <em style={{ color: "var(--text-secondary)" }}>{children}</em>,
-  a: ({ children, href }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: 2 }}>{children}</a>
-  ),
-  ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
-  ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  code: ({ className, children }: any) => {
-    const text = String(children);
-    const isInline = !className && !text.includes("\n");
-    if (isInline) {
-      return (
-        <code
-          className="fc-inline-code"
-          style={{
-            background: "var(--code-bg)",
-            color: "var(--code-text)",
-            padding: "0.12em 0.4em",
-            borderRadius: 6,
-            fontFamily: "var(--font-mono), monospace",
-            fontSize: "0.85em",
-            wordBreak: "break-word",
-          }}
-        >
-          {children}
-        </code>
-      );
-    }
-    return <MiniCode className={className}>{children}</MiniCode>;
-  },
-};
+function makeMiniComponents(highlightLine = -1): Components {
+  return {
+    pre: ({ children }) => <>{children}</>,
+    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+    h1: ({ children }) => <p className="mb-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+    h2: ({ children }) => <p className="mb-2 text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+    h3: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+    h4: ({ children }) => <p className="mb-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{children}</p>,
+    blockquote: ({ children }) => (
+      <blockquote className="mb-2 border-l-2 pl-3" style={{ borderColor: "var(--accent)", color: "var(--text-secondary)" }}>{children}</blockquote>
+    ),
+    strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
+    em: ({ children }) => <em style={{ color: "var(--text-secondary)" }}>{children}</em>,
+    a: ({ children, href }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: 2 }}>{children}</a>
+    ),
+    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
+    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
+    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+    code: ({ className, children }: any) => {
+      const text = String(children);
+      const isInline = !className && !text.includes("\n");
+      if (isInline) {
+        return (
+          <code
+            className="fc-inline-code"
+            style={{
+              background: "var(--code-bg)",
+              color: "var(--code-text)",
+              padding: "0.12em 0.4em",
+              borderRadius: 6,
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: "0.85em",
+              wordBreak: "break-word",
+            }}
+          >
+            {children}
+          </code>
+        );
+      }
+      return <MiniCode className={className} highlightLine={highlightLine}>{children}</MiniCode>;
+    },
+  };
+}
 
-function MiniMarkdown({ content }: { content: string }) {
+const miniComponents = makeMiniComponents();
+
+function MiniMarkdown({ content, components }: { content: string; components?: Components }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={miniComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components ?? miniComponents}>
       {content}
     </ReactMarkdown>
   );
 }
 
 // Renders markdown as blocks; the block currently being spoken shows
-// word-level highlight tracking, other blocks render as normal markdown.
-function TrackedContent({ content, activeBlock, boundaryChar, center }: { content: string; activeBlock: number; boundaryChar: number; center?: boolean }) {
+// word-level highlight tracking (code blocks keep their syntax-highlighted
+// view and instead track the active LINE), other blocks render as normal markdown.
+function TrackedContent({ content, activeBlock, boundaryChar, activeLine, center }: { content: string; activeBlock: number; boundaryChar: number; activeLine: number; center?: boolean }) {
   const blocks = useMemo(() => splitBlocks(content), [content]);
   const activeRef = useRef<HTMLDivElement | null>(null);
+  const isCode = activeBlock >= 0 && isCodeBlock(blocks[activeBlock] || "");
+  const components = useMemo(
+    () => (isCode ? makeMiniComponents(activeLine) : undefined),
+    [isCode, activeLine]
+  );
 
   useEffect(() => {
-    if (activeBlock >= 0 && activeRef.current) {
+    if (activeBlock < 0 || !activeRef.current) return;
+    if (isCode) {
+      activeRef.current.querySelector(".tts-code-line-active")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
       activeRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-  }, [activeBlock]);
+  }, [activeBlock, activeLine, isCode]);
 
   return (
     <div className={center ? "text-center" : ""}>
       {blocks.map((b, i) => (
         <div key={i} ref={i === activeBlock ? activeRef : undefined} className={`tts-block${i === activeBlock ? " tts-block-active" : ""}`}>
           {i === activeBlock ? (
-            <SpokenText text={ttsText(b)} charIndex={boundaryChar} />
+            isCodeBlock(b) ? (
+              <MiniMarkdown content={b} components={components} />
+            ) : (
+              <SpokenText text={ttsText(b)} charIndex={boundaryChar} />
+            )
           ) : (
             <MiniMarkdown content={b} />
           )}
@@ -153,8 +181,8 @@ function TrackedContent({ content, activeBlock, boundaryChar, center }: { conten
   );
 }
 
-function QuestionFace({ card, bookName, loopPlaying, onStartStop, activeBlock, boundaryChar }: {
-  card: Flashcard; bookName?: string; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number;
+function QuestionFace({ card, bookName, loopPlaying, onStartStop, activeBlock, boundaryChar, activeLine }: {
+  card: Flashcard; bookName?: string; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number; activeLine: number;
 }) {
   return (
     <>
@@ -191,15 +219,15 @@ function QuestionFace({ card, bookName, loopPlaying, onStartStop, activeBlock, b
       </div>
       <div className="flex-1 flex items-center justify-center overflow-y-auto">
         <div className="w-full text-base font-medium leading-relaxed text-center" style={{ color: "var(--text-primary)" }}>
-          <TrackedContent content={card.question} activeBlock={activeBlock} boundaryChar={boundaryChar} center />
+          <TrackedContent content={card.question} activeBlock={activeBlock} boundaryChar={boundaryChar} activeLine={activeLine} center />
         </div>
       </div>
     </>
   );
 }
 
-function AnswerFace({ card, loopPlaying, onStartStop, activeBlock, boundaryChar }: {
-  card: Flashcard; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number;
+function AnswerFace({ card, loopPlaying, onStartStop, activeBlock, boundaryChar, activeLine }: {
+  card: Flashcard; loopPlaying: boolean; onStartStop: () => void; activeBlock: number; boundaryChar: number; activeLine: number;
 }) {
   return (
     <>
@@ -223,7 +251,7 @@ function AnswerFace({ card, loopPlaying, onStartStop, activeBlock, boundaryChar 
       </div>
       <div className="flex-1 overflow-y-auto flashcard-answer">
         <div className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-          <TrackedContent content={card.answer} activeBlock={activeBlock} boundaryChar={boundaryChar} />
+          <TrackedContent content={card.answer} activeBlock={activeBlock} boundaryChar={boundaryChar} activeLine={activeLine} />
         </div>
       </div>
     </>
@@ -278,7 +306,7 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   ttsRef.current = tts;
   const [loopPlaying, setLoopPlaying] = useState(false);
   const loopRef = useRef(false);
-  const [ttsLoc, setTtsLoc] = useState<{ idx: number; phase: "q" | "a"; blockIdx: number; charStart: number } | null>(null);
+  const [ttsLoc, setTtsLoc] = useState<{ idx: number; phase: "q" | "a"; blockIdx: number; charStart: number; lineIdx: number } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -427,7 +455,7 @@ const stopLoop = useCallback(() => {
     ttsRef.current.stop();
   }, []);
 
-  const playCard = useCallback((idx: number, phase: "q" | "a", blockIdx = 0) => {
+  const playCard = useCallback((idx: number, phase: "q" | "a", blockIdx = 0, lineIdx = 0) => {
     if (!loopRef.current) return;
     const card = orderedCardsRef.current[idx];
     if (!card) { stopLoop(); return; }
@@ -440,9 +468,24 @@ const stopLoop = useCallback(() => {
       if (loopRef.current) playCard(next, "q", 0);
       return;
     }
+    const block = blocks[blockIdx];
     setFlipped(phase === "a");
-    setTtsLoc({ idx, phase, blockIdx, charStart: -1 });
-    const text = ttsText(blocks[blockIdx]);
+
+    // Code blocks: keep the syntax-highlighted view and speak line-by-line,
+    // highlighting the active line (word tracking doesn't apply to code).
+    if (isCodeBlock(block)) {
+      const lines = codeLines(block);
+      if (lineIdx >= lines.length) { playCard(idx, phase, blockIdx + 1); return; }
+      setTtsLoc({ idx, phase, blockIdx, charStart: -1, lineIdx });
+      const text = ttsText(lines[lineIdx]);
+      const done = () => { if (loopRef.current) playCard(idx, phase, blockIdx, lineIdx + 1); };
+      if (!text) { setTimeout(done, 80); return; }
+      ttsRef.current.speak(text, done);
+      return;
+    }
+
+    setTtsLoc({ idx, phase, blockIdx, charStart: -1, lineIdx: -1 });
+    const text = ttsText(block);
     const done = () => { if (loopRef.current) playCard(idx, phase, blockIdx + 1); };
     const onBoundary = (ci: number) => {
       setTtsLoc((prev) =>
@@ -573,6 +616,8 @@ const stopLoop = useCallback(() => {
   const aActiveBlock = loopPlaying && ttsLoc && ttsLoc.idx === currentIdx && ttsLoc.phase === "a" ? ttsLoc.blockIdx : -1;
   const qBoundary = qActiveBlock >= 0 && ttsLoc ? ttsLoc.charStart : -1;
   const aBoundary = aActiveBlock >= 0 && ttsLoc ? ttsLoc.charStart : -1;
+  const qActiveLine = qActiveBlock >= 0 && ttsLoc ? ttsLoc.lineIdx : -1;
+  const aActiveLine = aActiveBlock >= 0 && ttsLoc ? ttsLoc.lineIdx : -1;
 
   const reshuffle = useCallback(() => {
     setShuffledSeed(Math.floor(Math.random() * 100000));
@@ -866,9 +911,9 @@ const stopLoop = useCallback(() => {
                 }}>
                 {swiping && <SwipeIndicator swipeOffset={swipeOffset} threshold={SWIPE_THRESHOLD} />}
                 {flipped ? (
-                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} />
+                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} activeLine={aActiveLine} />
                 ) : (
-                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} />
+                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} activeLine={qActiveLine} />
                 )}
               </div>
             ) : (
@@ -880,11 +925,11 @@ const stopLoop = useCallback(() => {
                 {swiping && <SwipeIndicator swipeOffset={swipeOffset} threshold={SWIPE_THRESHOLD} />}
                 <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border"
                   style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
-                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} />
+                  <QuestionFace card={current} bookName={bookName} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={qActiveBlock} boundaryChar={qBoundary} activeLine={qActiveLine} />
                 </div>
                 <div className="absolute inset-0 backface-hidden rounded-2xl p-4 sm:p-8 flex flex-col shadow-sm border rotate-y-180"
                   style={{ background: "var(--bg-elevated)", borderColor: "var(--border-subtle)", backfaceVisibility: "hidden" }}>
-                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} />
+                  <AnswerFace card={current} loopPlaying={loopPlaying} onStartStop={toggleLoop} activeBlock={aActiveBlock} boundaryChar={aBoundary} activeLine={aActiveLine} />
                 </div>
               </div>
             )}

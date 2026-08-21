@@ -889,3 +889,11 @@ main::after {
   margin: 0 -2px;
   box-shadow: inset 0 -2px 0 var(--accent);
 }
+
+/* ---- TTS active line inside code blocks (flashcards) ---- */
+.fc-code code > span { display: block; }
+.tts-code-line-active {
+  background: var(--accent-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-radius: 2px;
+}

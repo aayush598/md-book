@@ -17,7 +17,7 @@ import Flashcards from "@/components/flashcards";
 import ProblemsView from "@/components/problems-view";
 import TTSControls from "@/components/tts-controls";
 import { useTTS } from "@/lib/use-tts";
-import { splitBlocks, ttsText, isHeadingBlock } from "@/lib/tts";
+import { splitBlocks, ttsText, isHeadingBlock, isCodeBlock } from "@/lib/tts";
 import SpokenText from "@/components/spoken-text";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { saveProject as saveEbookProject } from "@/lib/ebook-storage";
@@ -742,7 +742,7 @@ export default function BookPage() {
                                 </svg>
                               </button>
                             )}
-                            {active ? (
+                            {active && !isCodeBlock(block) ? (
                               <SpokenText text={ttsText(block)} charIndex={pos.charStart} />
                             ) : (
                               <MarkdownViewer content={block} enableDropcap={isFirst && bi === 0} />

@@ -17,6 +17,20 @@ export function isHeadingBlock(block: string): boolean {
   return /^#{1,6}\s/.test(block.trim());
 }
 
+// A fenced code block (``` ... ```)
+export function isCodeBlock(block: string): boolean {
+  return block.trimStart().startsWith("```");
+}
+
+// Raw source lines inside a fenced code block (fence markers stripped)
+export function codeLines(block: string): string[] {
+  const lines = block.split("\n");
+  const start = lines[0].trimStart().startsWith("```") ? 1 : 0;
+  let end = lines.length;
+  if (end > start && lines[end - 1].trim().startsWith("```")) end -= 1;
+  return lines.slice(start, end);
+}
+
 // Split markdown into speakable blocks: paragraphs, list groups, headings,
 // blockquotes and code fences (each fence stays a single block).
 export function splitBlocks(md: string): string[] {
