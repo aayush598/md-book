@@ -76,7 +76,9 @@ interface GitTreeItem {
 
 export async function getBookTree(config: BookConfig): Promise<Book> {
   const url = `https://api.github.com/repos/${config.owner}/${config.repo}/git/trees/${config.branch}?recursive=1`;
+  // "no-cache" = always revalidate: 304 (cheap) when unchanged, fresh data when updated
   const res = await fetch(url, {
+    cache: "no-cache",
     headers: { Accept: "application/vnd.github.v3+json" },
   });
   if (!res.ok) throw new Error(`Failed to fetch repo tree: ${res.status}`);
@@ -164,7 +166,10 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
 
 export async function fetchFileContent(config: BookConfig, path: string): Promise<string> {
   const url = `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${path}`;
-  const res = await fetch(url);
+  // "no-cache" = always revalidate against the CDN (304 when unchanged), so
+  // edits pushed to GitHub show up on the site immediately instead of the
+  // browser serving a stale cached copy.
+  const res = await fetch(url, { cache: "no-cache" });
   if (!res.ok) throw new Error(`Failed to fetch file ${path}: ${res.status}`);
   return res.text();
 }
