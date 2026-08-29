@@ -51,22 +51,30 @@ export default function MetadataEditor({ project, onUpdate }: MetadataEditorProp
   const meta = project.metadata;
   const brand = project.branding;
 
-  const updateMeta = (path: string, value: any) => {
+  const updateMeta = (path: string, value: unknown) => {
     const parts = path.split(".");
-    const updated = { ...meta } as any;
-    let obj = updated;
-    for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+    const updated: Record<string, unknown> = JSON.parse(JSON.stringify(meta));
+    let obj: Record<string, unknown> = updated;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const cur: unknown = obj[parts[i]];
+      if (typeof cur !== "object" || cur === null) obj[parts[i]] = {};
+      obj = obj[parts[i]] as Record<string, unknown>;
+    }
     obj[parts[parts.length - 1]] = value;
-    onUpdate({ metadata: updated });
+    onUpdate({ metadata: updated as unknown as EbookMetadata });
   };
 
-  const updateBrand = (path: string, value: any) => {
+  const updateBrand = (path: string, value: unknown) => {
     const parts = path.split(".");
-    const updated = { ...brand } as any;
-    let obj = updated;
-    for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+    const updated: Record<string, unknown> = JSON.parse(JSON.stringify(brand));
+    let obj: Record<string, unknown> = updated;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const cur: unknown = obj[parts[i]];
+      if (typeof cur !== "object" || cur === null) obj[parts[i]] = {};
+      obj = obj[parts[i]] as Record<string, unknown>;
+    }
     obj[parts[parts.length - 1]] = value;
-    onUpdate({ branding: updated });
+    onUpdate({ branding: updated as unknown as EbookBranding });
   };
 
   return (

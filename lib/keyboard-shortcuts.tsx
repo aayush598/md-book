@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export interface Shortcut {
   key: string;
@@ -14,7 +14,10 @@ export interface Shortcut {
 
 export function useKeyboard(shortcuts: Shortcut[], enabled: boolean = true) {
   const cache = useRef<Shortcut[]>(shortcuts);
-  cache.current = shortcuts;
+
+  useEffect(() => {
+    cache.current = shortcuts;
+  }, [shortcuts]);
 
   useEffect(() => {
     if (!enabled) return;

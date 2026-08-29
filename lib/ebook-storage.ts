@@ -79,7 +79,7 @@ export interface EbookProject {
 
 const STORAGE_KEY = "ebook-projects";
 
-function migrateProject(p: any): EbookProject {
+function migrateProject(p: EbookProject): EbookProject {
   if (!p.theme) p.theme = defaultTheme();
   if (!p.metadata) {
     p.metadata = {
@@ -517,7 +517,8 @@ export async function createProjectFromGithub(
   const data = await res.json();
 
   const allFiles: { path: string }[] = (data.tree || []).filter(
-    (item: any) => item.type === "blob" && (item.path.endsWith(".md") || item.path.endsWith(".txt"))
+    (item: { type: string; path: string }) =>
+      item.type === "blob" && (item.path.endsWith(".md") || item.path.endsWith(".txt"))
   );
   if (allFiles.length === 0) throw new Error("No markdown files found");
 

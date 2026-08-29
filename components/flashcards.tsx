@@ -39,7 +39,7 @@ class FlashcardErrorBoundary extends Component<{ children: React.ReactNode }, { 
   }
 }
 
-function MiniCode({ className, children, highlightLine }: any) {
+function MiniCode({ className, children, highlightLine }: { className?: string; children?: React.ReactNode; highlightLine?: number }) {
   const langMatch = /language-([\w+-]+)/.exec(className || "");
   const langName = langMatch ? langMatch[1].toLowerCase() : "";
 
@@ -105,7 +105,7 @@ function makeMiniComponents(highlightLine = -1): Components {
     ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
     ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
     li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-    code: ({ className, children }: any) => {
+    code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
       const text = String(children);
       const isInline = !className && !text.includes("\n");
       if (isInline) {
@@ -272,6 +272,43 @@ function SwipeIndicator({ swipeOffset, threshold }: { swipeOffset: number; thres
   );
 }
 
+// GitHub-style contribution calendar
+function ContributionCalendar({ data }: { data: DayData[] }) {
+  const weeks: DayData[][] = [];
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  for (let i = 0; i < sorted.length; i += 7) {
+    weeks.push(sorted.slice(i, i + 7));
+  }
+  const maxCount = Math.max(...data.map((c) => c.count), 1);
+  const levels = ["bg-[var(--bg-hover)]", "opacity-25", "opacity-50", "opacity-75", "opacity-100"];
+
+  return (
+    <div className="flex gap-[2px] overflow-x-auto pb-2">
+      {weeks.map((week, wi) => (
+        <div key={wi} className="flex flex-col gap-[2px]">
+          {Array.from({ length: 7 }, (_, di) => {
+            const day = week[di];
+            if (!day) return <div key={di} className="h-3 w-3 rounded-sm" style={{ background: "var(--bg-hover)" }} />;
+            const level = day.count === 0 ? 0 : Math.min(Math.ceil((day.count / maxCount) * 4), 4);
+            return (
+              <div key={day.date} className="group relative">
+                <div
+                  className={`h-3 w-3 rounded-sm transition-all ${levels[level]}`}
+                  style={{ background: day.count > 0 ? "var(--accent)" : "var(--bg-hover)" }}
+                />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 rounded-lg px-2 py-1 text-[10px] whitespace-nowrap shadow-lg"
+                  style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
+                  {day.count} cards on {day.date}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface FlashcardsProps {
   files: { path: string; content: string }[];
   currentPath: string | null;
@@ -303,7 +340,11 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tts = useTTS();
   const ttsRef = useRef(tts);
-  ttsRef.current = tts;
+
+  useEffect(() => {
+    ttsRef.current = tts;
+  }, [tts]);
+
   const [loopPlaying, setLoopPlaying] = useState(false);
   const loopRef = useRef(false);
   const [ttsLoc, setTtsLoc] = useState<{ idx: number; phase: "q" | "a"; blockIdx: number; charStart: number; lineIdx: number } | null>(null);
@@ -328,7 +369,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const allFileCache = useRef<{ path: string; content: string }[] | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scopeRef = useRef(store.scope);
-  scopeRef.current = store.scope;
+
+  useEffect(() => {
+    scopeRef.current = store.scope;
+  }, [store.scope]);
 
   // Fetch content for all files when scope is "all"
   useEffect(() => {
@@ -423,7 +467,10 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
   const totalCards = orderedCards.length;
   const progress = totalCards > 0 ? ((currentIdx + 1) / totalCards) * 100 : 0;
   const orderedCardsRef = useRef(orderedCards);
-  orderedCardsRef.current = orderedCards;
+
+  useEffect(() => {
+    orderedCardsRef.current = orderedCards;
+  }, [orderedCards]);
 
   const fetchStats = useCallback(async () => {
     const { getFlashcardStats, getDailyActivity } = await import("@/lib/flashcard-storage");
@@ -431,14 +478,20 @@ function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initia
     setContributions(getDailyActivity(91).map((d) => ({ date: d.date, count: d.cardsReviewed })));
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    const t = window.setTimeout(fetchStats, 0);
+    return () => window.clearTimeout(t);
+  }, [fetchStats]);
 
   useEffect(() => {
-    loopRef.current = false;
-    setLoopPlaying(false);
-    ttsRef.current.stop();
-    setCurrentIdx(0);
-    setFlipped(false);
+    const t = window.setTimeout(() => {
+      loopRef.current = false;
+      setLoopPlaying(false);
+      ttsRef.current.stop();
+      setCurrentIdx(0);
+      setFlipped(false);
+    }, 0);
+    return () => window.clearTimeout(t);
   }, [mode, store.allowRepeat]);
 
   const recordReview = useCallback(async (count: number) => {
@@ -456,46 +509,49 @@ const stopLoop = useCallback(() => {
   }, []);
 
   const playCard = useCallback((idx: number, phase: "q" | "a", blockIdx = 0, lineIdx = 0) => {
-    if (!loopRef.current) return;
-    const card = orderedCardsRef.current[idx];
-    if (!card) { stopLoop(); return; }
-    const blocks = splitBlocks(phase === "q" ? card.question : card.answer);
-    if (blockIdx >= blocks.length) {
-      if (phase === "q") { playCard(idx, "a", 0); return; }
-      const list = orderedCardsRef.current;
-      const next = list.length === 0 ? idx : idx >= list.length - 1 ? 0 : idx + 1;
-      setCurrentIdx(next);
-      if (loopRef.current) playCard(next, "q", 0);
-      return;
-    }
-    const block = blocks[blockIdx];
-    setFlipped(phase === "a");
+    const run = (i: number, ph: "q" | "a", bi = 0, li = 0) => {
+      if (!loopRef.current) return;
+      const card = orderedCardsRef.current[i];
+      if (!card) { stopLoop(); return; }
+      const blocks = splitBlocks(ph === "q" ? card.question : card.answer);
+      if (bi >= blocks.length) {
+        if (ph === "q") { run(i, "a", 0); return; }
+        const list = orderedCardsRef.current;
+        const next = list.length === 0 ? i : i >= list.length - 1 ? 0 : i + 1;
+        setCurrentIdx(next);
+        if (loopRef.current) run(next, "q", 0);
+        return;
+      }
+      const block = blocks[bi];
+      setFlipped(ph === "a");
 
-    // Code blocks: keep the syntax-highlighted view and speak line-by-line,
-    // highlighting the active line (word tracking doesn't apply to code).
-    if (isCodeBlock(block)) {
-      const lines = codeLines(block);
-      if (lineIdx >= lines.length) { playCard(idx, phase, blockIdx + 1); return; }
-      setTtsLoc({ idx, phase, blockIdx, charStart: -1, lineIdx });
-      const text = ttsText(lines[lineIdx]);
-      const done = () => { if (loopRef.current) playCard(idx, phase, blockIdx, lineIdx + 1); };
-      if (!text) { setTimeout(done, 80); return; }
-      ttsRef.current.speak(text, done);
-      return;
-    }
+      // Code blocks: keep the syntax-highlighted view and speak line-by-line,
+      // highlighting the active line (word tracking doesn't apply to code).
+      if (isCodeBlock(block)) {
+        const lines = codeLines(block);
+        if (li >= lines.length) { run(i, ph, bi + 1); return; }
+        setTtsLoc({ idx: i, phase: ph, blockIdx: bi, charStart: -1, lineIdx: li });
+        const text = ttsText(lines[li]);
+        const done = () => { if (loopRef.current) run(i, ph, bi, li + 1); };
+        if (!text) { setTimeout(done, 80); return; }
+        ttsRef.current.speak(text, done);
+        return;
+      }
 
-    setTtsLoc({ idx, phase, blockIdx, charStart: -1, lineIdx: -1 });
-    const text = ttsText(block);
-    const done = () => { if (loopRef.current) playCard(idx, phase, blockIdx + 1); };
-    const onBoundary = (ci: number) => {
-      setTtsLoc((prev) =>
-        prev && prev.idx === idx && prev.phase === phase && prev.blockIdx === blockIdx
-          ? { ...prev, charStart: ci }
-          : prev
-      );
+      setTtsLoc({ idx: i, phase: ph, blockIdx: bi, charStart: -1, lineIdx: -1 });
+      const text = ttsText(block);
+      const done = () => { if (loopRef.current) run(i, ph, bi + 1); };
+      const onBoundary = (ci: number) => {
+        setTtsLoc((prev) =>
+          prev && prev.idx === i && prev.phase === ph && prev.blockIdx === bi
+            ? { ...prev, charStart: ci }
+            : prev
+        );
+      };
+      if (!text) { setTimeout(done, 120); return; }
+      ttsRef.current.speak(text, done, onBoundary);
     };
-    if (!text) { setTimeout(done, 120); return; }
-    ttsRef.current.speak(text, done, onBoundary);
+    run(idx, phase, blockIdx, lineIdx);
   }, [stopLoop]);
 
   const startLoop = useCallback(() => {
@@ -547,7 +603,10 @@ const stopLoop = useCallback(() => {
   }, []);
 
   const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
+
+  useEffect(() => {
+    handleNextRef.current = handleNext;
+  }, [handleNext]);
 
   useEffect(() => {
     if (store.autoFlip && flipped && !loopPlaying) {
@@ -623,44 +682,6 @@ const stopLoop = useCallback(() => {
     setShuffledSeed(Math.floor(Math.random() * 100000));
     toast.success("Cards reshuffled");
   }, []);
-
-  const maxCount = Math.max(...contributions.map((c) => c.count), 1);
-
-  // GitHub-style contribution calendar
-  function ContributionCalendar({ data }: { data: DayData[] }) {
-    const weeks: DayData[][] = [];
-    const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
-    for (let i = 0; i < sorted.length; i += 7) {
-      weeks.push(sorted.slice(i, i + 7));
-    }
-    const levels = ["bg-[var(--bg-hover)]", "opacity-25", "opacity-50", "opacity-75", "opacity-100"];
-
-    return (
-      <div className="flex gap-[2px] overflow-x-auto pb-2">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex flex-col gap-[2px]">
-            {Array.from({ length: 7 }, (_, di) => {
-              const day = week[di];
-              if (!day) return <div key={di} className="h-3 w-3 rounded-sm" style={{ background: "var(--bg-hover)" }} />;
-              const level = day.count === 0 ? 0 : Math.min(Math.ceil((day.count / maxCount) * 4), 4);
-              return (
-                <div key={day.date} className="group relative">
-                  <div
-                    className={`h-3 w-3 rounded-sm transition-all ${levels[level]}`}
-                    style={{ background: day.count > 0 ? "var(--accent)" : "var(--bg-hover)" }}
-                  />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 rounded-lg px-2 py-1 text-[10px] whitespace-nowrap shadow-lg"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-                    {day.count} cards on {day.date}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  }
 
   if (showDashboard) {
     return (

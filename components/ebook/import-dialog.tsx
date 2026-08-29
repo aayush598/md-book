@@ -47,8 +47,8 @@ export default function ImportDialog({ onProject, onCancel }: ImportDialogProps)
       );
       saveProject(project);
       onProject(project);
-    } catch (e: any) {
-      setError(e.message || "Failed to import from GitHub");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to import from GitHub");
     }
     setLoading(false);
   };

@@ -85,7 +85,7 @@ export default function EbookDesigner({ project: initialProject, onBack }: Ebook
   }, [project, loading]);
 
   // Resize handlers (unchanged)
-  const initResize = useCallback((ref: React.RefObject<HTMLDivElement | null>, axis: "left" | "right") => {
+  const initResize = useCallback((axis: "left" | "right") => {
     return (e: React.MouseEvent) => {
       e.preventDefault();
       const startX = e.clientX;
@@ -268,7 +268,7 @@ export default function EbookDesigner({ project: initialProject, onBack }: Ebook
           </div>
           {leftOpen && (
             <div
-              onMouseDown={initResize(leftRef, "left")}
+              onMouseDown={initResize("left")}
               className="absolute right-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
             >
               <div className="absolute inset-y-0 right-0 w-px transition-all group-hover:w-[3px] group-hover:bg-accent/30" style={{ background: "var(--border-subtle)" }} />
@@ -376,7 +376,7 @@ export default function EbookDesigner({ project: initialProject, onBack }: Ebook
           </div>
           {rightOpen && (
             <div
-              onMouseDown={initResize(rightRef, "right")}
+              onMouseDown={initResize("right")}
               className="absolute left-0 top-0 bottom-0 z-10 w-2 cursor-col-resize group"
             >
               <div className="absolute inset-y-0 left-0 w-px transition-all group-hover:w-[3px] group-hover:bg-accent/30" style={{ background: "var(--border-subtle)" }} />

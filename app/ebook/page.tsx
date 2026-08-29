@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getProjects, getProject, deleteProject, type EbookProject } from "@/lib/ebook-storage";
 import ImportDialog from "@/components/ebook/import-dialog";
@@ -14,12 +15,14 @@ function EbookPageContent() {
 
   useEffect(() => {
     const all = getProjects();
-    setProjects(all);
     const openId = searchParams.get("open");
-    if (openId) {
-      const found = getProject(openId);
-      if (found) setActiveProject(found);
-    }
+    Promise.resolve().then(() => {
+      setProjects(all);
+      if (openId) {
+        const found = getProject(openId);
+        if (found) setActiveProject(found);
+      }
+    });
   }, [searchParams]);
 
   const refresh = () => setProjects(getProjects());
@@ -45,12 +48,12 @@ function EbookPageContent() {
           <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Ebook Designer</span>
         </div>
         <div className="flex items-center gap-3">
-          <a href="/" className="text-xs font-medium transition-all" style={{ color: "var(--text-tertiary)" }}
+          <Link href="/" className="text-xs font-medium transition-all" style={{ color: "var(--text-tertiary)" }}
             onMouseEnter={(e) => e.currentTarget.style.color = "var(--accent)"}
             onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-tertiary)"}
           >
             ← Back to Books
-          </a>
+          </Link>
         </div>
       </nav>
 

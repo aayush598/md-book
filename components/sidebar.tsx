@@ -201,7 +201,10 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
   });
 
   const widthRef = useRef(width);
-  widthRef.current = width;
+
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -234,9 +237,10 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
     return state;
   });
 
-  // Expand active chapter and all its ancestors
-  useEffect(() => {
-    if (!activePath) return;
+  // Expand active chapter and all its ancestors when navigating
+  const [lastActivePath, setLastActivePath] = useState(activePath);
+  if (activePath && activePath !== lastActivePath) {
+    setLastActivePath(activePath);
     const paths = [activePath];
     const parts = activePath.split("/");
     for (let i = 1; i < parts.length; i++) {
@@ -250,15 +254,16 @@ export default function Sidebar({ chapters, currentFile, onFileSelect, bookId }:
       }
       return changed ? next : prev;
     });
-  }, [activePath]);
+  }
 
   const [search, setSearch] = useState("");
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
   useEffect(() => {
-    if (bookId) {
-      setBookmarks(getBookmarks().filter((b) => b.bookId === bookId));
-    }
+    const t = window.setTimeout(() => {
+      if (bookId) setBookmarks(getBookmarks().filter((b) => b.bookId === bookId));
+    }, 0);
+    return () => window.clearTimeout(t);
   }, [bookId, currentFile]);
 
   const toggle = (path: string) => {

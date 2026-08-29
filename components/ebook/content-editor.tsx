@@ -52,11 +52,9 @@ export default function ContentEditor({ project, onProjectChange, activeChapterI
   }, []); // only on mount
 
   // Sync parent-driven activeChapterId changes
-  useEffect(() => {
-    if (activeChapterId && activeChapterId !== activeId) {
-      setActiveId(activeChapterId);
-    }
-  }, [activeChapterId]);
+  if (activeChapterId && activeChapterId !== activeId) {
+    setActiveId(activeChapterId);
+  }
 
   const active = sorted.find((c) => c.id === activeId) || sorted[0];
   const parts = getParts(chapters);

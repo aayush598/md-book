@@ -130,25 +130,31 @@ function FontPreview({ fontId }: { fontId: string }) {
 
 export default function ThemeEditor({ project, onThemeChange }: ThemeEditorProps) {
   const theme = project.theme || defaultTheme();
-  const set = (path: string, value: any) => {
+  const set = (path: string, value: unknown) => {
     const parts = path.split(".");
-    const updated = { ...theme };
-    let obj: any = updated;
-    for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+    const updated: Record<string, unknown> = JSON.parse(JSON.stringify(theme));
+    let obj: Record<string, unknown> = updated;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const cur: unknown = obj[parts[i]];
+      if (typeof cur !== "object" || cur === null) obj[parts[i]] = {};
+      obj = obj[parts[i]] as Record<string, unknown>;
+    }
     obj[parts[parts.length - 1]] = value;
-    onThemeChange(updated);
+    onThemeChange(updated as unknown as EbookTheme);
   };
 
-  const t = (path: string) => {
+  const t = (path: string): never => {
     const parts = path.split(".");
-    let obj: any = theme;
-    for (const p of parts) obj = obj?.[p];
-    return obj ?? "";
+    let obj: unknown = theme;
+    for (const p of parts) obj = (obj as Record<string, unknown> | null | undefined)?.[p];
+    return (obj ?? "") as never;
   };
 
   const numVal = (path: string): number => {
-    const v = t(path);
-    return typeof v === "string" ? parseFloat(v.replace(/[^0-9.]/g, "")) || 1 : (typeof v === "number" ? v : 1);
+    const v: unknown = t(path);
+    if (typeof v === "string") return parseFloat(v.replace(/[^0-9.]/g, "")) || 1;
+    if (typeof v === "number") return v;
+    return 1;
   };
 
   return (

@@ -1,11 +1,16 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
 import type { Components } from "react-markdown";
 import { parseProblemFile, type Problem, type ProblemFile } from "@/lib/problem-files";
+import AnalyseButton from "@/components/viz/analyse-button";
+import { looksLikePython } from "@/lib/viz/pyodide";
+import { indexPythonBlocks } from "@/lib/viz/solutions-index";
+import { AnalyseCtx, type AnalyseLookup } from "@/components/viz/analyse-context";
+import type { AnalyseQuestion } from "@/lib/viz/analyse-session";
 
 interface ProblemsViewProps {
   files: { path: string; content: string }[];
@@ -126,7 +131,7 @@ function CodeFullscreen({ info, onClose }: { info: CodeViewInfo; onClose: () => 
   );
 }
 
-function MdInlineCode({ children }: any) {
+function MdInlineCode({ children }: { children?: ReactNode }) {
   return (
     <code
       className="fc-inline-code"
@@ -145,7 +150,7 @@ function MdInlineCode({ children }: any) {
   );
 }
 
-function MdBlockCode({ className, children, onExpand }: any) {
+function MdBlockCode({ className, children, onExpand }: { className?: string; children?: ReactNode; onExpand: (info: CodeViewInfo) => void }) {
   const [copied, setCopied] = useState(false);
   const langMatch = /language-([\w+-]+)/.exec(className || "");
   const langName = langMatch ? langMatch[1].toLowerCase() : "";
@@ -201,19 +206,20 @@ function MdBlockCode({ className, children, onExpand }: any) {
           </button>
         </div>
       </div>
-      <pre
-        className="overflow-x-auto rounded-b-lg"
-        style={{ background: "var(--pre-bg)", margin: 0, padding: "0.85rem 1rem", lineHeight: 1.55 }}
-      >
-        <code
-          className="hljs font-mono text-[0.8rem]"
-          style={{ background: "transparent", color: "var(--pre-text)", padding: 0 }}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      </pre>
-    </div>
-  );
-}
+<pre
+          className="overflow-x-auto rounded-b-lg"
+          style={{ background: "var(--pre-bg)", margin: 0, padding: "0.85rem 1rem", lineHeight: 1.55 }}
+        >
+          <code
+            className="hljs font-mono text-[0.8rem]"
+            style={{ background: "transparent", color: "var(--pre-text)", padding: 0 }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </pre>
+        {looksLikePython(code) && <AnalyseButton source={code} title={langName || "python"} />}
+      </div>
+    );
+  }
 
 function makeMiniComponents(onExpand: (i: CodeViewInfo) => void): Components {
   return {
@@ -233,7 +239,7 @@ function makeMiniComponents(onExpand: (i: CodeViewInfo) => void): Components {
     ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
     ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
     li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-    code: ({ className, children }: any) => {
+    code: ({ className, children }: { className?: string; children?: ReactNode }) => {
       const text = String(children);
       const isInline = !className && !text.includes("\n");
       if (isInline) return <MdInlineCode>{children}</MdInlineCode>;
@@ -359,14 +365,16 @@ function ProblemCard({
 
 export default function ProblemsView({ files, currentPath }: ProblemsViewProps) {
   const [activePath, setActivePath] = useState<string>(currentPath || (files[0]?.path ?? ""));
+
+  // Sync parent-driven currentPath changes
+  if (currentPath && currentPath !== activePath) {
+    setActivePath(currentPath);
+  }
+
   const [openProblems, setOpenProblems] = useState<Set<string>>(new Set());
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [codeView, setCodeView] = useState<CodeViewInfo | null>(null);
-
-  useEffect(() => {
-    if (currentPath) setActivePath(currentPath);
-  }, [currentPath]);
 
   const parsed = useMemo(() => {
     const map = new Map<string, ProblemFile>();
@@ -403,7 +411,23 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
 
   const onExpandCode = useCallback((info: CodeViewInfo) => setCodeView(info), []);
 
+  // Every runnable python block in the current sheet -> its sibling question
+  // list + this block's index, so AnalyseButton can hand the /analyse page
+  // full prev/next navigation and the question text.
+  const codeLookup = useMemo<AnalyseLookup>(() => {
+    const m = new Map<string, { questions: AnalyseQuestion[]; active: number }>();
+    for (const f of files) {
+      const list = indexPythonBlocks(f.content);
+      for (let i = 0; i < list.length; i++) {
+        const src = list[i].source;
+        if (!m.has(src)) m.set(src, { questions: list, active: i });
+      }
+    }
+    return (code: string) => m.get(code) ?? null;
+  }, [files]);
+
   return (
+    <AnalyseCtx.Provider value={codeLookup}>
     <div className="flex flex-1 flex-col min-h-0" style={{ background: "var(--bg-page)" }}>
       {withProblems.length > 1 && (
         <div className="flex items-center gap-2 px-3 sm:px-6 pt-3 overflow-x-auto shrink-0">
@@ -489,5 +513,6 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
 
       {codeView && <CodeFullscreen info={codeView} onClose={() => setCodeView(null)} />}
     </div>
+    </AnalyseCtx.Provider>
   );
 }

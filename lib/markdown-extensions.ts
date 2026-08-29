@@ -1,4 +1,5 @@
 import hljs from "highlight.js";
+import { marked } from "marked";
 
 const HTTP_METHOD_COLORS: Record<string, string> = {
   GET: "#16a34a",
@@ -146,14 +147,7 @@ function highlightTerminalCommand(cmd: string): string {
     .replace(/(?<=^|\s)([A-Z_]+)(?=\s|$)/g, '<span style="color:#f472b6">$1</span>');
 }
 
-let _marked: typeof import("marked") | null = null;
-function getMarked(): typeof import("marked") {
-  if (!_marked) _marked = require("marked") as typeof import("marked");
-  return _marked;
-}
-
 export function renderMarkdown(md: string): string {
-  const { marked } = getMarked();
   let html = marked.parse(md, { async: false }) as string;
 
   // Process code blocks

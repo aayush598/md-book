@@ -3,16 +3,22 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, type ReactNode, type HTMLAttributes } from "react";
 import type { Components } from "react-markdown";
+import AnalyseButton from "@/components/viz/analyse-button";
+import { looksLikePython } from "@/lib/viz/pyodide";
+import { indexPythonBlocks } from "@/lib/viz/solutions-index";
+import { AnalyseCtx, type AnalyseLookup } from "@/components/viz/analyse-context";
 
 const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u25A0-\u25FF\u2190-\u21FF\u2080-\u2089\u25CB\u25A1\u25AA\u25AB\u25AC\u25AD]/;
+
+type MdBlockProps = HTMLAttributes<HTMLElement> & { children?: ReactNode };
 
 function isDiagram(text: string): boolean {
   return BOX_DRAWING_RE.test(text);
 }
 
-function DiagramBlock({ children }: any) {
+function DiagramBlock({ children }: { children?: ReactNode }) {
   return (
     <div className="diagram-block">
       <pre className="diagram-pre">
@@ -74,7 +80,7 @@ function RoadmapBlock({ lines }: { lines: string[] }) {
   );
 }
 
-function CodeBlock({ className, children, ...props }: any) {
+function CodeBlock({ className, children, ...props }: MdBlockProps) {
   const text = String(children);
 
   if (isDiagram(text)) {
@@ -89,7 +95,7 @@ function CodeBlock({ className, children, ...props }: any) {
   return <CodeBlockInner className={className} {...props}>{children}</CodeBlockInner>;
 }
 
-function CodeBlockInner({ className, children, ...props }: any) {
+function CodeBlockInner({ className, children, ...props }: MdBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const langMatch = /language-([\w+-]+)/.exec(className || "");
@@ -155,11 +161,12 @@ function CodeBlockInner({ className, children, ...props }: any) {
           {...props}
         />
       </pre>
+      {looksLikePython(String(children)) && <AnalyseButton source={String(children).replace(/\n$/, "")} title={langName || "python"} />}
     </div>
   );
 }
 
-function InlineCode({ children, ...props }: any) {
+function InlineCode({ children, ...props }: MdBlockProps) {
   return (
     <code
       className="rounded-md px-1.5 py-0.5 text-sm font-mono"
@@ -217,7 +224,7 @@ const components: Components = {
       {children}
     </blockquote>
   ),
-  code: ({ className, children, ...props }: any) => {
+  code: ({ className, children, ...props }: MdBlockProps) => {
     const text = String(children);
     const isInline = !className && !text.includes("\n");
     return isInline ? <InlineCode {...props}>{children}</InlineCode> : <CodeBlock className={className} {...props}>{children}</CodeBlock>;
@@ -245,11 +252,21 @@ interface MarkdownViewerProps {
 }
 
 export default function MarkdownViewer({ content, enableDropcap }: MarkdownViewerProps) {
+  const codeLookup = useMemo<AnalyseLookup>(() => {
+    const list = indexPythonBlocks(content);
+    return (code: string) => {
+      const i = list.findIndex((q) => q.source === code);
+      return i === -1 ? null : { questions: list, active: i };
+    };
+  }, [content]);
+
   return (
-    <div className={`reader-prose ${enableDropcap ? "has-dropcap" : ""}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
-    </div>
+    <AnalyseCtx.Provider value={codeLookup}>
+      <div className={`reader-prose ${enableDropcap ? "has-dropcap" : ""}`}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    </AnalyseCtx.Provider>
   );
 }

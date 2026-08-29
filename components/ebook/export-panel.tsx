@@ -14,6 +14,36 @@ interface ExportPanelProps {
   onProjectChange: (p: EbookProject) => void;
 }
 
+function ExportButton({ label, icon, onClick, primary, busy }: { label: string; icon: string; onClick: () => void; primary?: boolean; busy?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      className={`w-full py-2.5 rounded-xl text-sm font-medium transition-all ${primary ? "text-white" : ""}`}
+      style={{
+        background: primary ? "linear-gradient(135deg, var(--accent), var(--accent-soft))" : "var(--bg-hover)",
+        color: primary ? "white" : "var(--text-primary)",
+        border: primary ? "none" : "1px solid var(--border-subtle)",
+        opacity: busy ? 0.5 : 1,
+      }}
+      onMouseEnter={(e) => { if (!busy && !primary) e.currentTarget.style.background = "var(--bg-active)"; }}
+      onMouseLeave={(e) => { if (!busy && !primary) e.currentTarget.style.background = "var(--bg-hover)"; }}
+    >
+      {busy ? (
+        <span className="flex items-center justify-center gap-2">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          Exporting...
+        </span>
+      ) : (
+        <span className="flex items-center justify-center gap-2">
+          <span className="text-base">{icon}</span>
+          {label}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function ExportPanel({ project, onProjectChange }: ExportPanelProps) {
   const [exporting, setExporting] = useState<string | null>(null);
   const template = getTemplate(project.templateId);
@@ -147,37 +177,6 @@ ${bodyHtml}
     { id: "8.5x11", label: '8.5" \u00d7 11"', desc: "Workbook / Textbook" },
   ];
 
-  function ExportButton({ id, label, icon, onClick, primary }: { id: string; label: string; icon: string; onClick: () => void; primary?: boolean }) {
-    const busy = exporting === id;
-    return (
-      <button
-        onClick={onClick}
-        disabled={busy}
-        className={`w-full py-2.5 rounded-xl text-sm font-medium transition-all ${primary ? "text-white" : ""}`}
-        style={{
-          background: primary ? "linear-gradient(135deg, var(--accent), var(--accent-soft))" : "var(--bg-hover)",
-          color: primary ? "white" : "var(--text-primary)",
-          border: primary ? "none" : "1px solid var(--border-subtle)",
-          opacity: busy ? 0.5 : 1,
-        }}
-        onMouseEnter={(e) => { if (!busy && !primary) e.currentTarget.style.background = "var(--bg-active)"; }}
-        onMouseLeave={(e) => { if (!busy && !primary) e.currentTarget.style.background = "var(--bg-hover)"; }}
-      >
-        {busy ? (
-          <span className="flex items-center justify-center gap-2">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            Exporting...
-          </span>
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            <span className="text-base">{icon}</span>
-            {label}
-          </span>
-        )}
-      </button>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
@@ -248,11 +247,11 @@ ${bodyHtml}
 
         {/* Action Buttons */}
         <div className="space-y-2">
-          <ExportButton id="save" label="Save Project" icon={"\uD83D\uDCBE"} onClick={handleSave} />
-          <ExportButton id="md" label="Export Markdown" icon={"\uD83D\uDCDD"} onClick={handleExportMarkdown} />
-          <ExportButton id="html" label="Export HTML" icon={"\uD83C\uDF10"} onClick={handleExportHtml} />
-          <ExportButton id="epub" label="Export EPUB" icon={"\uD83D\uDCDA"} onClick={handleExportEpub} primary />
-          <ExportButton id="print" label="Print / Save as PDF" icon={"\uD83D\uDD0D"} onClick={handlePrint} />
+          <ExportButton label="Save Project" icon={"\uD83D\uDCBE"} onClick={handleSave} busy={exporting === "save"} />
+          <ExportButton label="Export Markdown" icon={"\uD83D\uDCDD"} onClick={handleExportMarkdown} busy={exporting === "md"} />
+          <ExportButton label="Export HTML" icon={"\uD83C\uDF10"} onClick={handleExportHtml} busy={exporting === "html"} />
+          <ExportButton label="Export EPUB" icon={"\uD83D\uDCDA"} onClick={handleExportEpub} primary busy={exporting === "epub"} />
+          <ExportButton label="Print / Save as PDF" icon={"\uD83D\uDD0D"} onClick={handlePrint} busy={exporting === "print"} />
 
           <p className="text-[10px] text-center" style={{ color: "var(--text-muted)" }}>
             Print/PDF uses theme + template for consistent output

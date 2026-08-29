@@ -352,7 +352,8 @@ export default function BookPage() {
 
   // Stop reading when leaving the page content (chapter switch, mode toggles)
   useEffect(() => {
-    stopReaderTts();
+    const t = window.setTimeout(stopReaderTts, 0);
+    return () => window.clearTimeout(t);
   }, [anchorFile, flashcardMode, problemsMode, readingMode, stopReaderTts]);
 
   useEffect(() => () => {
