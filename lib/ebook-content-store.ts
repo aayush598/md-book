@@ -95,7 +95,7 @@ export async function loadAllContent(
   chapterIds: string[]
 ): Promise<Map<string, string>> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     const store = tx.objectStore(STORE_NAME);
     const result = new Map<string, string>();

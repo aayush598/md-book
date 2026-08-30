@@ -49,6 +49,7 @@ export default function ContentEditor({ project, onProjectChange, activeChapterI
     if (!activeChapterId && sorted[0]) {
       onActiveChapterChange?.(sorted[0].id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only sync; rerunning would fight the parent
   }, []); // only on mount
 
   // Sync parent-driven activeChapterId changes
@@ -106,6 +107,7 @@ export default function ContentEditor({ project, onProjectChange, activeChapterI
         category: "Editing",
       },
     ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers are recreated each render; listing them would defeat the memo
   }, [chapters, activeId, activeChapterId]);
 
   const updateChapter = (id: string, field: "title" | "content", value: string) => {

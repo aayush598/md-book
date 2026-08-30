@@ -240,6 +240,7 @@ const components: Components = {
   strong: ({ children, ...props }) => <strong style={{ fontWeight: 600, color: "var(--text-primary)" }} {...props}>{children}</strong>,
   em: ({ children, ...props }) => <em style={{ fontStyle: "italic", color: "var(--text-secondary)" }} {...props}>{children}</em>,
   img: ({ alt, src, ...props }) => (
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote markdown, no known dimensions for Image optimization
     <img alt={alt || ""} src={src} className="my-6 rounded-xl max-w-full h-auto shadow-sm" style={{ border: "1px solid var(--border-subtle)" }} loading="lazy" {...props} />
   ),
 };

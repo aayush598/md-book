@@ -128,11 +128,9 @@ export function saveProjectMeta(project: EbookProject): void {
     // localStorage quota exceeded — save metadata only (content lives in IndexedDB)
     const stripped = projects.map((p) => ({
       ...p,
-      chapters: p.chapters.map(({ content: _, ...rest }) => ({ ...rest, content: "" })),
+      chapters: p.chapters.map((ch) => ({ ...ch, content: "" })),
     }));
-    stripped.find((p) => p.id === project.id)!.chapters = toSave.chapters.map(
-      ({ content: _, ...rest }) => ({ ...rest, content: "" })
-    );
+    stripped.find((p) => p.id === project.id)!.chapters = toSave.chapters.map((ch) => ({ ...ch, content: "" }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
   }
 }

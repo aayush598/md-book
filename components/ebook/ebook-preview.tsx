@@ -2,7 +2,7 @@
 
 import { type EbookProject, type EbookChapter } from "@/lib/ebook-storage";
 import { getTemplate } from "./templates";
-import { useMemo, useEffect, useRef, useCallback } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { processContentHtml } from "@/lib/markdown-extensions";
 import { themeToCss, pageSizes } from "@/lib/ebook-theme";
 import { renderCoverPage, getCoverCss } from "@/lib/cover-page";
@@ -114,7 +114,7 @@ export default function EbookPreview({ project, activeChapterId, onChapterClick 
     `).join("\n");
 
     const coverHtml = project.cover.showCoverPage
-      ? renderCoverPage(project.cover, project.pageSize)
+      ? renderCoverPage(project.cover)
       : "";
 
     return `<!DOCTYPE html>
@@ -174,7 +174,7 @@ ${chapterPagesHtml}
 </div>
 </body>
 </html>`;
-  }, [activeChapter, pages, template, project.bgColor, project.theme, project.pageSize, project.cover, themeCssStr, coverCss, project.name]);
+  }, [activeChapter, pages, template, project.bgColor, project.cover, themeCssStr, coverCss, project.name]);
 
   useEffect(() => {
     if (iframeRef.current && html) {

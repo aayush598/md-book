@@ -99,7 +99,6 @@ export async function getBookTree(config: BookConfig): Promise<Book> {
     const relativePath = config.path ? file.path.slice(bookPrefix.length) : file.path;
     const parts = relativePath.split("/");
     const fileName = parts.pop()!;
-    const dirPath = parts.join("/");
     const fullDirPath = file.path.slice(0, file.path.lastIndexOf("/"));
 
     if (!chapterMap.has(fullDirPath)) {

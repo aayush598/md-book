@@ -7,7 +7,7 @@ import { visualisePython } from "@/lib/viz/pyodide";
 import type { VizTrace } from "@/lib/viz/types";
 import type { AnalyseQuestion } from "@/lib/viz/analyse-session";
 import { callArgsText, replaceCallArgs } from "@/lib/viz/custom-input";
-import { questionKey, progressFor, readQuestionStatuses, writeQuestionStatuses, type QuestionStatus } from "@/lib/question-status";
+import { questionKey, progressFor, readQuestionStatuses, writeQuestionStatuses, QUESTION_STATUS_LABEL, type QuestionStatus } from "@/lib/question-status";
 import VizStage from "./viz-stage";
 import { StatusControl } from "./question-status";
 import { ACCENT } from "./primitives";
@@ -75,6 +75,15 @@ function ToolbarBtn({
   );
 }
 
+const PROGRESS_FILTERS: (QuestionStatus | "all")[] = ["all", "pending", "attempted", "completed"];
+
+const PROGRESS_DOT: Record<QuestionStatus | "all", string> = {
+  all: "#8b949e",
+  pending: "#8b949e",
+  attempted: "#f59e0b",
+  completed: "#22c55e",
+};
+
 export default function VizStudio({
   source,
   title,
@@ -107,6 +116,8 @@ export default function VizStudio({
   });
   const [showQuestion, setShowQuestion] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
+  const [progressFilter, setProgressFilter] = useState<QuestionStatus | "all">("all");
   const [argsText, setArgsText] = useState("");
 
   // The first source this page session saw (before any custom input), kept
@@ -217,19 +228,52 @@ export default function VizStudio({
   // path; the question number is preferred, the title is the fallback key.
   const statusKey = path && curQ ? questionKey(path, curQ.number ?? curQ.title) : null;
   const curStatus: QuestionStatus | null = statusKey ? (statuses[statusKey] ?? "pending") : null;
+
+  const applyStatus = useCallback((key: string, s: QuestionStatus) => {
+    setStatuses((prev) => {
+      const next = { ...prev, [key]: s };
+      writeQuestionStatuses(next);
+      return next;
+    });
+  }, []);
+
   const setStatus = useCallback(
     (s: QuestionStatus) => {
       if (!statusKey) return;
-      setStatuses((prev) => {
-        const next = { ...prev, [statusKey]: s };
-        writeQuestionStatuses(next);
-        return next;
-      });
+      applyStatus(statusKey, s);
     },
-    [statusKey]
+    [statusKey, applyStatus]
   );
 
   const progress = progressFor(statuses, questions ?? [], path);
+
+  // ---- Progress overview across all sibling questions ----
+  const statusOf = useCallback(
+    (q: AnalyseQuestion): QuestionStatus =>
+      path ? (statuses[questionKey(path, q.number ?? q.title)] ?? "pending") : "pending",
+    [path, statuses]
+  );
+  const progressQs = questions ?? [];
+  const counts: Record<QuestionStatus | "all", number> = {
+    all: progressQs.length,
+    pending: 0,
+    attempted: 0,
+    completed: 0,
+  };
+  for (const q of progressQs) counts[statusOf(q)] += 1;
+  let nextUp: number | null = null;
+  for (let i = 0; i < progressQs.length; i++) {
+    if (statusOf(progressQs[i]) === "pending") { nextUp = i; break; }
+  }
+  if (nextUp === null) {
+    for (let i = 0; i < progressQs.length; i++) {
+      if (statusOf(progressQs[i]) === "attempted") { nextUp = i; break; }
+    }
+  }
+  const visibleRows =
+    progressFilter === "all"
+      ? progressQs.map((q, i) => ({ q, i }) as const)
+      : progressQs.map((q, i) => ({ q, i }) as const).filter(({ q }) => statusOf(q) === progressFilter);
 
   // ---- Custom input ----
   const applyInput = useCallback(() => {
@@ -502,6 +546,19 @@ export default function VizStudio({
 
         <div className="mx-1 h-4 w-px" style={{ background: "var(--border-subtle)" }} />
 
+        {questions && path && (
+          <ToolbarBtn
+            title={showProgress ? "Hide the progress overview" : "Progress across all questions — statuses, filter, next up"}
+            active={showProgress}
+            onClick={() => setShowProgress((v) => !v)}
+          >
+            <svg className="h-3.5 w-3.5 mr-1 inline -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+            </svg>
+            Progress
+          </ToolbarBtn>
+        )}
+
         <ToolbarBtn title="Smaller code font (-)" onClick={() => setFontSize((s) => Math.max(12, s - 1))}>A−</ToolbarBtn>
         <span className="viz-step-count">{fontSize}px</span>
         <ToolbarBtn title="Larger code font (+)" onClick={() => setFontSize((s) => Math.min(24, s + 1))}>A+</ToolbarBtn>
@@ -578,6 +635,111 @@ export default function VizStudio({
             <button onClick={() => setShowInputs(false)} className="viz-ctrl px-3 py-1 text-[11px]" style={{ color: "var(--text-tertiary)" }}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Progress overview across the sheet's questions ---- */}
+      {showProgress && questions && path && (
+        <div className="viz-progress-panel">
+          <div className="viz-progress-head">
+            <span className="viz-caption-label">Progress</span>
+            {progress && (
+              <div
+                className="viz-progress-bar"
+                title={`${progress.completed} completed · ${progress.attempted} attempted · ${progress.pending} pending`}
+              >
+                {progress.completed > 0 && (
+                  <span className="viz-progress-fill viz-fill-done" style={{ width: `${(progress.completed / progressQs.length) * 100}%` }} />
+                )}
+                {progress.attempted > 0 && (
+                  <span className="viz-progress-fill viz-fill-try" style={{ width: `${(progress.attempted / progressQs.length) * 100}%` }} />
+                )}
+              </div>
+            )}
+            {progress && (
+              <span className="viz-progress-counts" style={{ color: "var(--text-tertiary)" }}>
+                <span style={{ color: "#22c55e" }}>{progress.completed}</span> done
+                <span className="mx-1 opacity-40">·</span>
+                <span style={{ color: "#f59e0b" }}>{progress.attempted}</span> attempted
+                <span className="mx-1 opacity-40">·</span>
+                <span style={{ color: "#8b949e" }}>{progress.pending}</span> left
+              </span>
+            )}
+            <div className="viz-progress-filters">
+              {PROGRESS_FILTERS.map((f) => {
+                const activePill = progressFilter === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setProgressFilter(f)}
+                    className="viz-progress-pill"
+                    aria-pressed={activePill}
+                    style={
+                      activePill
+                        ? { background: "rgba(88,166,255,0.18)", color: ACCENT, border: "1px solid rgba(88,166,255,0.4)" }
+                        : { background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }
+                    }
+                  >
+                    <span className="viz-progress-dot" style={{ background: PROGRESS_DOT[f] }} />
+                    {f === "all" ? "All" : QUESTION_STATUS_LABEL[f]}
+                    <span style={{ opacity: 0.6 }}>{counts[f]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {nextUp !== null && progressFilter === "all" && (
+            <div className="viz-progress-next">
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: ACCENT }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12l-7.5 7.5M21 12H3" />
+              </svg>
+              <span className="min-w-0 truncate">
+                <span className="viz-caption-label">Next up:</span>{" "}
+                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {progressQs[nextUp].title}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => go(nextUp)}
+                disabled={!canNav}
+                className="viz-ctrl px-2.5 py-1 text-[10px] font-semibold ml-auto shrink-0"
+                style={{ background: "rgba(88,166,255,0.15)", color: ACCENT, border: "1px solid rgba(88,166,255,0.35)" }}
+                title="Open this question in the visualizer"
+              >
+                Work on it
+              </button>
+            </div>
+          )}
+
+          <div className="viz-progress-list">
+            {visibleRows.length === 0 ? (
+              <p className="py-2 text-center text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                {progressQs.length === 0
+                  ? "No questions in this sheet yet."
+                  : "No questions match this filter."}
+              </p>
+            ) : (
+              visibleRows.map(({ q, i }) => {
+                const s = statusOf(q);
+                const statusKey = questionKey(path, q.number ?? q.title);
+                return (
+                  <div key={i} className={`viz-progress-row${i === activeIdx ? " viz-progress-active" : ""}`}>
+                    <button type="button" className="viz-progress-idx" onClick={() => go(i)} disabled={!canNav} title="Open this question">
+                      {i + 1}
+                    </button>
+                    <button type="button" className="viz-progress-title" onClick={() => go(i)} disabled={!canNav} title={`Open ${q.title}`}>
+                      <span className="truncate">{q.title}</span>
+                      {i === activeIdx && <span className="viz-progress-cur">current</span>}
+                    </button>
+                    <StatusControl value={s} onChange={(ns) => applyStatus(statusKey, ns)} compact />
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}

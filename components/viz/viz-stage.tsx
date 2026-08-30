@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { planStep, roleFor } from "@/lib/viz/layout";
 import { diffStep } from "@/lib/viz/diff";
 import type { SnapScalar, VizStep, VizTrace } from "@/lib/viz/types";
@@ -84,6 +84,28 @@ function ConditionBadge({
   );
 }
 
+function copyToClipboard(text: string): boolean {
+  try {
+    if (window.navigator.clipboard?.writeText) {
+      window.navigator.clipboard.writeText(text).catch(() => {});
+      return true;
+    }
+  } catch { /* clipboard API unavailable — fall through */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function CodePane({
   lines,
   active,
@@ -101,6 +123,10 @@ function CodePane({
 }) {
   const paneRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLDivElement>(null);
+  const [selected, setSelected] = useState<{ start: number; end: number } | null>(null);
+  const [copied, setCopied] = useState<"all" | "sel" | null>(null);
+  const flashTimer = useRef<number | null>(null);
+
   useEffect(() => {
     const pane = paneRef.current;
     const el = activeRef.current;
@@ -108,38 +134,111 @@ function CodePane({
       pane.scrollTop = Math.max(0, el.offsetTop - pane.clientHeight / 2);
     }
   }, [active]);
+
+  useEffect(() => () => {
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+  }, []);
+
+  const flash = (which: "all" | "sel") => {
+    setCopied(which);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setCopied(null), 1600);
+  };
+
+  const count = selected ? selected.end - selected.start + 1 : 0;
+
   return (
-    <div className="viz-code-pane" ref={paneRef} style={{ fontSize }}>
-      {lines.map((line, i) => {
-        const activeLine = i === active;
-        const isSkip = !activeLine && skip.has(i);
-        const cls =
-          `viz-line ${activeLine ? `viz-line-active viz-line-${tone}` : ""} ${isSkip ? "viz-line-skip" : ""}`;
-        return (
-          <div
-            key={i}
-            ref={activeLine ? activeRef : undefined}
-            onClick={() => onLine(i)}
-            title={
-              isSkip
-                ? `This line was skipped this step (its branch didn't run)`
-                : activeLine
-                  ? `Executing line ${i + 1}`
-                  : `Jump the visualizer to line ${i + 1}`
-            }
-            className={cls}
-          >
-            <span className="viz-line-num">{i + 1}</span>
-            <span className="viz-line-text">{line || " "}</span>
-            {activeLine && tone !== "acc" && (
-              <span className={`viz-line-cx viz-line-cx-${tone}`}>
-                {tone === "ok" ? "✓ True" : "✗ False"}
-              </span>
-            )}
-            {activeLine && <span className={`viz-line-arrow viz-line-arrow-${tone}`}>▸</span>}
-          </div>
-        );
-      })}
+    <div className="viz-code-wrap">
+      <div className="viz-code-bar">
+        <button
+          type="button"
+          onClick={() => setSelected(lines.length ? { start: 0, end: lines.length - 1 } : null)}
+          title="Select every line"
+          className={selected && count === lines.length ? "viz-code-bar-on" : ""}
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!selected) return;
+            copyToClipboard(lines.slice(selected.start, selected.end + 1).join("\n"));
+            flash("sel");
+          }}
+          disabled={!selected}
+          title={selected ? `Copy lines ${selected.start + 1}–${selected.end + 1}` : "Click a line number to select lines first"}
+        >
+          Copy selected{selected ? ` · ${count} ${count === 1 ? "line" : "lines"}` : ""}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            copyToClipboard(lines.join("\n"));
+            flash("all");
+          }}
+          title="Copy the whole program"
+        >
+          Copy all
+        </button>
+        {copied && (
+          <span className="viz-code-copied" role="status">
+            ✓ Copied{copied === "sel" ? " selected lines" : " all code"}
+          </span>
+        )}
+        <span className="viz-code-hint">
+          Click a line number to select it, <kbd>Shift</kbd>-click for a range.
+        </span>
+      </div>
+      <div className="viz-code-pane" ref={paneRef} style={{ fontSize }}>
+        {lines.map((line, i) => {
+          const activeLine = i === active;
+          const isSkip = !activeLine && skip.has(i);
+          const isSel = !!selected && i >= selected.start && i <= selected.end;
+          const cls =
+            `viz-line ${activeLine ? `viz-line-active viz-line-${tone}` : ""} ${isSkip ? "viz-line-skip" : ""} ${isSel ? "viz-line-sel" : ""}`;
+          return (
+            <div
+              key={i}
+              ref={activeLine ? activeRef : undefined}
+              onClick={() => onLine(i)}
+              title={
+                isSkip
+                  ? `This line was skipped this step (its branch didn't run)`
+                  : activeLine
+                    ? `Executing line ${i + 1}`
+                    : `Jump the visualizer to line ${i + 1}`
+              }
+              className={cls}
+            >
+              <button
+                type="button"
+                className="viz-line-num"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (e.shiftKey && selected) {
+                    setSelected({ start: Math.min(selected.start, i), end: Math.max(selected.end, i) });
+                  } else if (selected && selected.start === i && selected.end === i) {
+                    setSelected(null);
+                  } else {
+                    setSelected({ start: i, end: i });
+                  }
+                }}
+                title="Select this line (Shift-click selects a range)"
+                aria-pressed={isSel}
+              >
+                {i + 1}
+              </button>
+              <span className="viz-line-text">{line || " "}</span>
+              {activeLine && tone !== "acc" && (
+                <span className={`viz-line-cx viz-line-cx-${tone}`}>
+                  {tone === "ok" ? "✓ True" : "✗ False"}
+                </span>
+              )}
+              {activeLine && <span className={`viz-line-arrow viz-line-arrow-${tone}`}>▸</span>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

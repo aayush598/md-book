@@ -37,7 +37,7 @@ export default function BookPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const slug = (params.slug as string[]) || [];
+  const slug = useMemo(() => (params.slug as string[]) || [], [params.slug]);
   const mainRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadedRef = useRef(false);
@@ -49,7 +49,7 @@ export default function BookPage() {
   const [readingTime, setReadingTime] = useState(0);
   const [initialLoad, setInitialLoad] = useState(true);
 
-  const { fontSize, lineHeight, readingMode, sidebarPinned, setSidebarPinned, getFontSizePx } = useReadingSettings();
+  const { lineHeight, readingMode, sidebarPinned, setSidebarPinned, getFontSizePx } = useReadingSettings();
   const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted, () => true);
 
   const [book, setBook] = useState<Book | null>(null);
@@ -85,6 +85,45 @@ export default function BookPage() {
     const cfg = getBookConfig(bid);
     return { bookId: bid, config: cfg || null };
   }, [slug]);
+
+  const loadFileRange = useCallback(
+    function loadFileRange(
+      flat: { path: string; chapterName: string; progress: number; totalInChapter: number }[],
+      anchor: string,
+      count: number
+    ) {
+      if (!config) return;
+      const startIdx = flat.findIndex((f) => f.path === anchor);
+      if (startIdx === -1) return;
+      const toLoad = flat.slice(startIdx, startIdx + count);
+      const loaded: LoadedFile[] = [];
+      const cfg = config;
+
+      let loadIndex = 0;
+      function loadNext() {
+        if (loadIndex >= toLoad.length) {
+          setLoadedFiles(loaded);
+          setBookLoading(false);
+          setInitialLoad(false);
+          return;
+        }
+        const f = toLoad[loadIndex];
+        fetchFileContent(cfg, f.path)
+          .then((text) => {
+            loaded.push({ ...f, content: text });
+            loadIndex++;
+            loadNext();
+          })
+          .catch(() => {
+            loaded.push({ ...f, content: "> *Error loading this file.*" });
+            loadIndex++;
+            loadNext();
+          });
+      }
+      loadNext();
+    },
+    [config]
+  );
 
   // Load book
   useEffect(() => {
@@ -130,43 +169,8 @@ export default function BookPage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setBookLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once bootstrap guarded by loadedRef
   }, [config?.id]);
-
-  function loadFileRange(
-    flat: { path: string; chapterName: string; progress: number; totalInChapter: number }[],
-    anchor: string,
-    count: number
-  ) {
-    if (!config) return;
-    const startIdx = flat.findIndex((f) => f.path === anchor);
-    if (startIdx === -1) return;
-    const toLoad = flat.slice(startIdx, startIdx + count);
-    const loaded: LoadedFile[] = [];
-    const cfg = config;
-
-    let loadIndex = 0;
-    function loadNext() {
-      if (loadIndex >= toLoad.length) {
-        setLoadedFiles(loaded);
-        setBookLoading(false);
-        setInitialLoad(false);
-        return;
-      }
-      const f = toLoad[loadIndex];
-      fetchFileContent(cfg, f.path)
-        .then((text) => {
-          loaded.push({ ...f, content: text });
-          loadIndex++;
-          loadNext();
-        })
-        .catch(() => {
-          loaded.push({ ...f, content: "> *Error loading this file.*" });
-          loadIndex++;
-          loadNext();
-        });
-    }
-    loadNext();
-  }
 
   const loadNextFile = useCallback(() => {
     if (loadingNext || !config) return;
@@ -205,13 +209,15 @@ export default function BookPage() {
     return () => observer.disconnect();
   }, [loadNextFile, readingMode, loadedFiles.length]);
 
+  const firstContent = loadedFiles.length > 0 ? loadedFiles[0].content : null;
+
   useEffect(() => {
-    if (loadedFiles.length > 0) {
-      const words = loadedFiles[0].content.split(/\s+/).length;
+    if (firstContent != null) {
+      const words = firstContent.split(/\s+/).length;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setReadingTime(Math.max(1, Math.ceil(words / 200)));
     }
-  }, [loadedFiles.length > 0 ? loadedFiles[0].content : null]);
+  }, [firstContent]);
 
   // Save reading progress when anchorFile changes
   useEffect(() => {
@@ -283,7 +289,7 @@ export default function BookPage() {
         loadFileRange(allFiles, filePath, readingMode === "scroll" ? 2 : 1);
       }
     },
-    [bookId, config, readingMode, allFiles, slug]
+    [bookId, config, readingMode, allFiles, slug, loadFileRange, router]
   );
 
   const currentIdx = anchorFile ? allFiles.findIndex((f) => f.path === anchorFile) : -1;
@@ -296,7 +302,9 @@ export default function BookPage() {
   // ---- Reader TTS (listen to the chapter, with per-block highlighting) ----
   const readerTts = useTTS();
   const readerTtsRef = useRef(readerTts);
-  readerTtsRef.current = readerTts;
+  useEffect(() => {
+    readerTtsRef.current = readerTts;
+  }, [readerTts]);
   const [readerTtsOn, setReaderTtsOn] = useState(false);
   const [ttsPos, setTtsPos] = useState<{ fileIdx: number; blockIdx: number; charStart: number } | null>(null);
   const ttsSeqOnRef = useRef(false);
@@ -304,7 +312,9 @@ export default function BookPage() {
 
   const fileBlocks = useMemo(() => loadedFiles.map((f) => splitBlocks(f.content)), [loadedFiles]);
   const fileBlocksRef = useRef(fileBlocks);
-  fileBlocksRef.current = fileBlocks;
+  useEffect(() => {
+    fileBlocksRef.current = fileBlocks;
+  }, [fileBlocks]);
 
   // Whole-file index of every runnable Python block, so the "Analyse this
   // solution" button under any block hands /analyse the full sibling-question
@@ -322,17 +332,19 @@ export default function BookPage() {
     readerTtsRef.current.stop();
   }, []);
 
+  const speakFromRef = useRef<(fileIdx: number, blockIdx: number, runId: number) => void>(() => {});
+
   const speakFrom = useCallback((fileIdx: number, blockIdx: number, runId: number) => {
     if (!ttsSeqOnRef.current || runId !== ttsRunIdRef.current) return;
     const blocks = fileBlocksRef.current[fileIdx];
     if (!blocks || blockIdx >= blocks.length) {
-      if (fileIdx + 1 < fileBlocksRef.current.length) { speakFrom(fileIdx + 1, 0, runId); return; }
+      if (fileIdx + 1 < fileBlocksRef.current.length) { speakFromRef.current(fileIdx + 1, 0, runId); return; }
       stopReaderTts();
       return;
     }
     setTtsPos({ fileIdx, blockIdx, charStart: -1 });
     const text = ttsText(blocks[blockIdx]);
-    const done = () => speakFrom(fileIdx, blockIdx + 1, runId);
+    const done = () => speakFromRef.current(fileIdx, blockIdx + 1, runId);
     const onBoundary = (ci: number) => {
       setTtsPos((prev) =>
         prev && prev.fileIdx === fileIdx && prev.blockIdx === blockIdx
@@ -343,6 +355,10 @@ export default function BookPage() {
     if (!text) { setTimeout(done, 120); return; }
     readerTtsRef.current.speak(text, done, onBoundary);
   }, [stopReaderTts]);
+
+  useEffect(() => {
+    speakFromRef.current = speakFrom;
+  }, [speakFrom]);
 
   const startReaderTts = useCallback((fileIdx: number, blockIdx: number) => {
     readerTtsRef.current.stop();

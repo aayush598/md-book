@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { EbookProject } from "@/lib/ebook-storage";
-import { defaultTheme, type EbookTheme, FONT_OPTIONS, pageSizes, themeToCss, getFontStack } from "@/lib/ebook-theme";
+import { defaultTheme, type EbookTheme, FONT_OPTIONS, pageSizes, getFontStack } from "@/lib/ebook-theme";
 
 interface ThemeEditorProps {
   project: EbookProject;
@@ -150,13 +150,6 @@ export default function ThemeEditor({ project, onThemeChange }: ThemeEditorProps
     return (obj ?? "") as never;
   };
 
-  const numVal = (path: string): number => {
-    const v: unknown = t(path);
-    if (typeof v === "string") return parseFloat(v.replace(/[^0-9.]/g, "")) || 1;
-    if (typeof v === "number") return v;
-    return 1;
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-3 py-2 shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
@@ -196,7 +189,7 @@ export default function ThemeEditor({ project, onThemeChange }: ThemeEditorProps
 
         {/* Layout & Margins */}
         <Section title="Layout">
-          <SelectRow label="Page Size" value={project.pageSize} onChange={(v) => onThemeChange(theme)} options={pageSizes().map((ps) => ({ id: ps.id, name: ps.label }))} />
+          <SelectRow label="Page Size" value={project.pageSize} onChange={() => onThemeChange(theme)} options={pageSizes().map((ps) => ({ id: ps.id, name: ps.label }))} />
           <SliderRow label="Margin Top" value={t("layout.marginTop")} onChange={(v) => set("layout.marginTop", v)} min={0.5} max={4} step={0.1} suffix="em" />
           <SliderRow label="Margin Bottom" value={t("layout.marginBottom")} onChange={(v) => set("layout.marginBottom", v)} min={0.5} max={4} step={0.1} suffix="em" />
           <SliderRow label="Margin Left" value={t("layout.marginLeft")} onChange={(v) => set("layout.marginLeft", v)} min={0.5} max={4} step={0.1} suffix="em" />

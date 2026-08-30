@@ -36,7 +36,6 @@ export default function EbookDesigner({ project: initialProject, onBack }: Ebook
   const [projectName, setProjectName] = useState(project.name);
   const [activeChapterId, setActiveChapterId] = useState<string | undefined>();
   const dirtyRef = useRef<Set<string>>(new Set());
-  const lastSaveRef = useRef(0);
 
   const handleChapterClick = useCallback((chapterId: string) => {
     setActiveChapterId(chapterId);

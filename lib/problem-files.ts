@@ -29,8 +29,6 @@ function firstNumber(text: string): { num: string; rest: string } {
   return { num: "", rest: text };
 }
 
-const LC_RE = /(?:LC|LeetCode|Leetcode)\s*[#]\s*(\d+)/;
-
 export function parseProblemFile(content: string, path = ""): ProblemFile {
   const lines = content.split("\n");
   const title = content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim() ?? (path.split("/").pop() || "Problems");

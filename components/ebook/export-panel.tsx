@@ -93,7 +93,7 @@ ${printStyles}
 
   function fullHtmlDoc(bodyHtml: string, printMode: boolean): string {
     const coverHtml = project.cover.showCoverPage
-      ? renderCoverPage(project.cover, project.pageSize)
+      ? renderCoverPage(project.cover)
       : "";
 
     return `<!DOCTYPE html>

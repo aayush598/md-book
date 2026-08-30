@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from "highlight.js";
@@ -10,6 +11,7 @@ import AnalyseButton from "@/components/viz/analyse-button";
 import { looksLikePython } from "@/lib/viz/pyodide";
 import { buildSheetLookup } from "@/lib/viz/solutions-index";
 import { AnalyseCtx } from "@/components/viz/analyse-context";
+import { storeAnalysePayload } from "@/lib/viz/analyse-session";
 import { StatusControl } from "@/components/viz/question-status";
 import {
   progressFor,
@@ -279,6 +281,30 @@ const DIFF_COLORS: Record<string, { fg: string; bg: string }> = {
   None: { fg: "var(--text-tertiary)", bg: "var(--bg-hover)" },
 };
 
+const STATUS_COLORS: Record<QuestionStatus, { fg: string; bg: string; dot: string }> = {
+  pending: { fg: "var(--text-muted)", bg: "var(--bg-hover)", dot: "#8b949e" },
+  attempted: { fg: "#d29922", bg: "rgba(210,153,34,0.12)", dot: "#d29922" },
+  completed: { fg: "#22c55e", bg: "rgba(34,197,94,0.12)", dot: "#22c55e" },
+};
+
+const STATUS_TAB_KEYS: ("all" | QuestionStatus)[] = ["all", "pending", "attempted", "completed"];
+
+const STATUS_TAB_LABEL: Record<"all" | QuestionStatus, string> = {
+  all: "All",
+  pending: "Pending",
+  attempted: "Attempted",
+  completed: "Completed",
+};
+
+/** First runnable Python block inside a problem, for the "Visualise" shortcut. */
+function pythonSourceOf(problem: Problem): string | null {
+  for (const s of problem.sections) {
+    const m = /```(?:python|py|python3)\s*\n([\s\S]*?)```/i.exec(s.content);
+    if (m && looksLikePython(m[1])) return m[1].replace(/\n$/, "");
+  }
+  return null;
+}
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -379,8 +405,31 @@ function ProblemCard({
   );
 }
 
+function VisualiseButton({ src, title, onOpen }: { src: string; title: string; onOpen: (src: string, title: string) => void }) {
+  return (
+    <button
+      onClick={() => onOpen(src, title)}
+      className="viz-ctrl shrink-0 px-2 py-1.5 text-[10px] font-semibold"
+      style={{ background: "rgba(88,166,255,0.14)", color: "#58a6ff", border: "1px solid rgba(88,166,255,0.35)" }}
+      title={`Visualise "${title}" step by step`}
+    >
+      <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      Visualise
+    </button>
+  );
+}
+
 export default function ProblemsView({ files, currentPath }: ProblemsViewProps) {
+  const router = useRouter();
   const [activePath, setActivePath] = useState<string>(currentPath || (files[0]?.path ?? ""));
+
+  // View mode: the per-file browser, or one combined "All files" overview so
+  // every question's status is visible at a glance and the next one to work on
+  // stands out. Status filter applies in both modes.
+  const [mode, setMode] = useState<"file" | "all">("file");
+  const [statusFilter, setStatusFilter] = useState<"all" | QuestionStatus>("all");
 
   // Sync parent-driven currentPath changes
   if (currentPath && currentPath !== activePath) {
@@ -418,7 +467,11 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
   const problems = activeFile?.problems ?? [];
 
   const withProblems = Array.from(parsed.values()).filter((pf) => pf.problems.length > 0);
-  const visible = problems.filter((p) => !filter || p.title.toLowerCase().includes(filter.toLowerCase()));
+  const visible = problems.filter(
+    (p) =>
+      (!filter || p.title.toLowerCase().includes(filter.toLowerCase())) &&
+      (statusFilter === "all" || statusOf(p) === statusFilter)
+  );
 
   const statusOf = (p: Problem): QuestionStatus =>
     statuses[questionKey(activeFile?.path ?? "", p.number)] ?? "pending";
@@ -455,10 +508,124 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
     [files]
   );
 
+  const openVisualise = useCallback(
+    (src: string, title: string) => {
+      const meta = codeLookup(src);
+      const q = meta ? meta.questions[meta.active] : undefined;
+      storeAnalysePayload({
+        source: src,
+        title: q?.title || title,
+        path: meta?.path,
+        questions: meta?.questions,
+        active: meta?.active,
+      });
+      const sp = new URLSearchParams();
+      sp.set("src", src);
+      sp.set("title", q?.title || title || "");
+      router.push(`/analyse?${sp.toString()}`);
+    },
+    [codeLookup, router]
+  );
+
+  // Combined stats across every sheet with questions.
+  const overall = useMemo(() => {
+    const filesWithProblems = Array.from(parsed.values()).filter((pf) => pf.problems.length > 0);
+    if (filesWithProblems.length === 0) return null;
+    let completed = 0;
+    let attempted = 0;
+    let total = 0;
+    for (const pf of filesWithProblems) {
+      for (const p of pf.problems) {
+        const s = statuses[questionKey(pf.path, p.number)] ?? "pending";
+        total += 1;
+        if (s === "completed") completed += 1;
+        else if (s === "attempted") attempted += 1;
+      }
+    }
+    return { total, completed, attempted, pending: total - completed - attempted, pct: Math.round((completed / total) * 100) };
+  }, [parsed, statuses]);
+
+  // Every question across all sheets, grouped by file, honouring the filter.
+  const allGroups = useMemo(() => {
+    const groups: { file: ProblemFile; rows: { problem: Problem; status: QuestionStatus }[] }[] = [];
+    for (const pf of parsed.values()) {
+      if (!pf.problems.length) continue;
+      const rows = pf.problems
+        .map((problem) => ({ problem, status: (statuses[questionKey(pf.path, problem.number)] ?? "pending") as QuestionStatus }))
+        .filter((r) => statusFilter === "all" || r.status === statusFilter);
+      if (rows.length) groups.push({ file: pf, rows });
+    }
+    return groups;
+  }, [parsed, statuses, statusFilter]);
+
+  // The first question (in sheet order) still sitting as pending — the obvious
+  // one to work on next. Cheap per-render scan (no memo: the compiler can't
+  // preserve an early-return loop over the file map).
+  let nextUp: { file: ProblemFile; problem: Problem } | null = null;
+  outer: for (const pf of parsed.values()) {
+    for (const p of pf.problems) {
+      if ((statuses[questionKey(pf.path, p.number)] ?? "pending") === "pending") {
+        nextUp = { file: pf, problem: p };
+        break outer;
+      }
+    }
+  }
+
+  const openInFileMode = useCallback((path: string, problemId: string) => {
+    setMode("file");
+    setStatusFilter("all");
+    setActivePath(path);
+    setOpenProblems((prev) => new Set(prev).add(problemId));
+  }, []);
+
   return (
     <AnalyseCtx.Provider value={codeLookup}>
     <div className="flex flex-1 flex-col min-h-0" style={{ background: "var(--bg-page)" }}>
-      {withProblems.length > 1 && (
+      {/* View mode + status filters: see every question's progress at a glance */}
+      <div className="flex flex-wrap items-center gap-2 px-3 sm:px-6 pt-3 shrink-0">
+        <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: "var(--bg-hover)", border: "1px solid var(--border-subtle)" }}>
+          <button
+            onClick={() => setMode("file")}
+            className="rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
+            style={{ background: mode === "file" ? "var(--bg-elevated)" : "transparent", color: mode === "file" ? "var(--text-primary)" : "var(--text-secondary)", boxShadow: mode === "file" ? "0 1px 2px rgba(0,0,0,0.3)" : "none" }}
+            title="Browse one sheet at a time"
+          >
+            This file
+          </button>
+          <button
+            onClick={() => setMode("all")}
+            className="rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
+            style={{ background: mode === "all" ? "var(--bg-elevated)" : "transparent", color: mode === "all" ? "var(--text-primary)" : "var(--text-secondary)", boxShadow: mode === "all" ? "0 1px 2px rgba(0,0,0,0.3)" : "none" }}
+            title="One combined list of every question in this book"
+          >
+            All files{overall ? ` · ${overall.total}` : ""}
+          </button>
+        </div>
+        <div className="h-4 w-px" style={{ background: "var(--border-subtle)" }} />
+        {STATUS_TAB_KEYS.map((k) => {
+          const active = statusFilter === k;
+          const c = k !== "all" ? STATUS_COLORS[k] : null;
+          const count = k === "all" ? (overall?.total ?? 0) : k === "pending" ? (overall?.pending ?? 0) : k === "attempted" ? (overall?.attempted ?? 0) : (overall?.completed ?? 0);
+          return (
+            <button
+              key={k}
+              onClick={() => setStatusFilter(k)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all"
+              style={{
+                background: active ? (c ? c.bg : "var(--accent-bg)") : "var(--bg-hover)",
+                color: active ? (c ? c.fg : "var(--accent)") : "var(--text-secondary)",
+                border: `1px solid ${active ? (c ? `${c.fg}55` : "transparent") : "var(--border-subtle)"}`,
+              }}
+            >
+              {c && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: active ? c.fg : c.dot }} />}
+              {STATUS_TAB_LABEL[k]}
+              <span style={{ opacity: 0.8 }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {mode === "file" && withProblems.length > 1 && (
         <div className="flex items-center gap-2 px-3 sm:px-6 pt-3 overflow-x-auto shrink-0">
           <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--text-tertiary)" }}>Files</span>
           {withProblems.map((pf) => {
@@ -481,7 +648,149 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
         </div>
       )}
 
-      {!activeFile || problems.length === 0 ? (
+      {mode === "all" ? (
+        <div className="flex-1 overflow-y-auto" style={{ background: "transparent" }}>
+          <div className="mx-auto max-w-3xl px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+            {/* Combined progress across every sheet */}
+            <div>
+              <div className="flex items-end gap-2">
+                <h2 className="text-base sm:text-lg font-bold tracking-tight truncate" style={{ color: "var(--text-primary)" }}>
+                  All questions
+                </h2>
+                {overall && (
+                  <span className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                    {overall.total} across {withProblems.length} {withProblems.length === 1 ? "file" : "files"}
+                  </span>
+                )}
+              </div>
+              {overall && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="h-1.5 w-32 sm:w-40 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${overall.pct}%`, background: "#22c55e" }} />
+                  </div>
+                  <span className="text-[11px] font-semibold" style={{ color: overall.pct === 100 ? "#22c55e" : "var(--text-muted)" }}>
+                    {overall.pct}% complete
+                  </span>
+                  <span className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                    · {overall.completed} done · {overall.attempted} attempted · {overall.pending} pending
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* The obvious next question to work on */}
+            {statusFilter === "all" && nextUp && (
+              <div className="flex items-center gap-3 rounded-xl border px-4 py-3" style={{ background: "var(--accent-bg)", borderColor: "rgba(88,166,255,0.3)" }}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ background: "rgba(88,166,255,0.15)" }}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="#58a6ff" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="viz-caption-label">Next up</div>
+                  <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{nextUp.problem.title}</p>
+                  <p className="truncate text-[11px]" style={{ color: "var(--text-tertiary)" }}>{nextUp.file.title}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const src = pythonSourceOf(nextUp.problem);
+                    if (src) openVisualise(src, nextUp.problem.title);
+                    else openInFileMode(nextUp.file.path, nextUp.problem.id);
+                  }}
+                  className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all"
+                  style={{ background: "#58a6ff", color: "#0d1117" }}
+                >
+                  Work on it
+                </button>
+              </div>
+            )}
+
+            {allGroups.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  {statusFilter === "all" ? "No coding problems found" : `No ${STATUS_TAB_LABEL[statusFilter].toLowerCase()} questions yet`}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  {statusFilter === "all"
+                    ? "The loaded files don't appear to contain numbered question headings (e.g. ## 1. Title)."
+                    : "Work through questions and mark their status here — the list fills in as you go."}
+                </p>
+              </div>
+            ) : (
+              allGroups.map((g) => (
+                <div key={g.file.path} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setMode("file");
+                        setActivePath(g.file.path);
+                      }}
+                      className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors"
+                      style={{ color: "var(--accent)" }}
+                      title={`Open ${g.file.fileName}`}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                      </svg>
+                      {g.file.fileName}
+                    </button>
+                    <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                      {g.rows.length} {g.rows.length === 1 ? "question" : "questions"}
+                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <div className="h-1 w-16 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${(g.rows.filter((r) => r.status === "completed").length / g.rows.length) * 100}%`, background: "#22c55e" }}
+                        />
+                      </div>
+                      <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                        {g.rows.filter((r) => r.status === "completed").length}/{g.rows.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {g.rows.map(({ problem, status }) => {
+                      const src = pythonSourceOf(problem);
+                      const diffColor = DIFF_COLORS[problem.difficulty] || DIFF_COLORS.None;
+                      const sc = STATUS_COLORS[status];
+                      return (
+                        <div key={problem.id} className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+                          <button
+                            onClick={() => openInFileMode(g.file.path, problem.id)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            title="Open in the questions browser"
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold" style={{ background: "var(--bg-hover)", color: "var(--accent)" }}>
+                              {problem.number || "·"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                                {problem.title}
+                              </span>
+                              {status !== "pending" && (
+                                <span className="mt-0.5 block text-[10px]" style={{ color: sc.fg }}>{STATUS_TAB_LABEL[status]}</span>
+                              )}
+                            </span>
+                            {problem.difficulty !== "None" && (
+                              <span className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" style={{ background: diffColor.bg, color: diffColor.fg }}>
+                                {problem.difficulty}
+                              </span>
+                            )}
+                          </button>
+                          {src && <VisualiseButton src={src} title={problem.title} onOpen={openVisualise} />}
+                          <StatusControl value={status} onChange={(s) => setStatus(g.file.path, problem.number, s)} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : !activeFile || problems.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-8">
           <div className="text-center max-w-sm">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: "var(--accent-bg)" }}>
@@ -533,7 +842,13 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
             </div>
 
             {visible.length === 0 ? (
-              <p className="text-sm py-10 text-center" style={{ color: "var(--text-muted)" }}>No questions match &quot;{filter}&quot;.</p>
+              <p className="text-sm py-10 text-center" style={{ color: "var(--text-muted)" }}>
+                {filter
+                  ? `No questions match "${filter}".`
+                  : statusFilter !== "all"
+                    ? `No ${STATUS_TAB_LABEL[statusFilter].toLowerCase()} questions in this file.`
+                    : "No questions here."}
+              </p>
             ) : (
               visible.map((problem) => (
                 <ProblemCard

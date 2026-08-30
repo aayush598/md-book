@@ -253,7 +253,7 @@ export function processHtml(html: string): string {
       }
       if (headers.length === 0) return table;
       // Add data-label to td cells
-      return table.replace(/<td[^>]*>([\s\S]*?)<\/td>/g, (td, content, idx) => {
+      return table.replace(/<td[^>]*>([\s\S]*?)<\/td>/g, (td, content) => {
         const colIdx = countPrecedingTds(td, table);
         const label = headers[colIdx] || "";
         return `<td data-label="${label.replace(/"/g, "&quot;")}">${content}</td>`;

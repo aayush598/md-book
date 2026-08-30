@@ -75,6 +75,7 @@ export default function TocGenerator({ project, onUpdateToc }: TocGeneratorProps
     }
 
     return lines.join("\n");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- iconFor/numeral are recreated each render; the memo tracks their inputs (showIcons/numeralStyle) instead
   }, [contentChapters, parts, style, showNumbers, showIcons, numeralStyle, showDescriptions, project.chapters]);
 
   return (

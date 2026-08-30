@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { EbookProject, EbookMetadata, EbookBranding } from "@/lib/ebook-storage";
 
 interface MetadataEditorProps {

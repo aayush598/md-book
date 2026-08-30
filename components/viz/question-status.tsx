@@ -41,9 +41,11 @@ function StatusIcon({ status }: { status: QuestionStatus }) {
 export function StatusControl({
   value,
   onChange,
+  compact,
 }: {
   value: QuestionStatus;
   onChange: (s: QuestionStatus) => void;
+  compact?: boolean;
 }) {
   return (
     <div
@@ -60,8 +62,13 @@ export function StatusControl({
             type="button"
             onClick={() => onChange(s)}
             aria-pressed={active}
+            aria-label={QUESTION_STATUS_LABEL[s]}
             title={`${QUESTION_STATUS_LABEL[s]}${active ? " (current)" : ""}`}
-            className="flex h-6 items-center gap-1.5 rounded-full px-2 text-[11px] font-medium transition-all"
+            className={
+              compact
+                ? "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium transition-all"
+                : "flex h-6 items-center gap-1.5 rounded-full px-2 text-[11px] font-medium transition-all"
+            }
             style={
               active
                 ? { background: ui.bg, color: ui.fg, boxShadow: `inset 0 0 0 1px ${ui.fg}38` }
@@ -69,7 +76,7 @@ export function StatusControl({
             }
           >
             <StatusIcon status={s} />
-            <span className="hidden sm:inline">{QUESTION_STATUS_LABEL[s]}</span>
+            {!compact && <span className="hidden sm:inline">{QUESTION_STATUS_LABEL[s]}</span>}
           </button>
         );
       })}

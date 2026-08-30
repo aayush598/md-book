@@ -327,7 +327,7 @@ interface DayData {
   count: number;
 }
 
-function FlashcardsInner({ files, currentPath, bookName, onClose, bookId, initialView = "cards", config, allFilePaths }: FlashcardsProps) {
+function FlashcardsInner({ files, currentPath, bookName, onClose, initialView = "cards", config, allFilePaths }: FlashcardsProps) {
   const store = useFlashcardStore();
   const soundMuted = useSyncExternalStore(subscribeToSoundMuted, isSoundMuted);
   const [mode, setMode] = useState<StudyMode>("random");

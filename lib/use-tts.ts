@@ -91,7 +91,7 @@ export function useTTS() {
     utteranceRef.current = u;
     try {
       window.speechSynthesis.speak(u);
-    } catch (e) {
+    } catch {
       toast.error("Speech not supported on this browser");
       setSpeaking(false);
     }

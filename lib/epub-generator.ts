@@ -1,7 +1,6 @@
-import hljs from "highlight.js";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { contentToMarkdown, type EbookProject } from "./ebook-storage";
+import { type EbookProject } from "./ebook-storage";
 import { getTemplate } from "@/components/ebook/templates";
 import { processContentHtml } from "./markdown-extensions";
 import { themeToCss } from "./ebook-theme";
@@ -70,7 +69,7 @@ export async function generateEpub(project: EbookProject): Promise<void> {
   // Add cover page as first item if enabled
   let coverIndex = 0;
   if (project.cover.showCoverPage) {
-    const coverHtml = renderCoverPage(project.cover, project.pageSize);
+    const coverHtml = renderCoverPage(project.cover);
     const coverXhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -91,7 +90,6 @@ ${coverHtml}
 
   sorted.forEach((ch, i) => {
     const num = String(i + 1).padStart(3, "0");
-    const slug = slugify(ch.title) || `chapter-${num}`;
     const html = processContentHtml(ch.content);
 
     const xhtml = `<?xml version="1.0" encoding="utf-8"?>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import type { EbookProject, EbookCover } from "@/lib/ebook-storage";
 
 interface CoverEditorProps {
@@ -36,9 +37,9 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState("");
 
-  const updateCover = (updates: Partial<EbookCover>) => {
+  const updateCover = useCallback((updates: Partial<EbookCover>) => {
     onChange({ cover: { ...cover, ...updates } });
-  };
+  }, [cover, onChange]);
 
   const handleImageUpload = useCallback((file: File) => {
     setUploadError("");
@@ -56,7 +57,7 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
       updateCover({ coverImage: dataUrl });
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [updateCover]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -87,7 +88,7 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
       setShowResizer(false);
     };
     img.src = cover.coverImage;
-  }, [cover.coverImage, resizeWidth, resizeHeight]);
+  }, [cover.coverImage, resizeWidth, resizeHeight, updateCover]);
 
   const handleConvertFormat = useCallback((format: "image/jpeg" | "image/png" | "image/webp") => {
     if (!cover.coverImage) return;
@@ -103,7 +104,7 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
       updateCover({ coverImage: resized });
     };
     img.src = cover.coverImage;
-  }, [cover.coverImage]);
+  }, [cover.coverImage, updateCover]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -155,9 +156,9 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
           </label>
           {cover.coverImage ? (
             <div className="space-y-2">
-              <div className="relative rounded-xl overflow-hidden" style={{ border: "1px solid var(--border-subtle)" }}>
-                <img src={cover.coverImage} alt="Cover preview" className="w-full h-48 object-contain" style={{ background: "#f0f0f0" }} />
-              </div>
+<div className="relative rounded-xl overflow-hidden h-48" style={{ border: "1px solid var(--border-subtle)" }}>
+  <Image src={cover.coverImage} alt="Cover preview" fill unoptimized className="object-contain" style={{ background: "#f0f0f0" }} />
+</div>
               <div className="flex gap-1.5">
                 <button
                   onClick={handleRemoveImage}
@@ -362,7 +363,7 @@ export default function CoverEditor({ project, onChange }: CoverEditorProps) {
             }}
           >
             {cover.coverImage ? (
-              <img src={cover.coverImage} alt="" className="w-full h-full object-cover absolute inset-0" />
+              <Image src={cover.coverImage} alt="" fill unoptimized className="object-cover" />
             ) : (
               <div className="relative z-10 p-4">
                 <h3

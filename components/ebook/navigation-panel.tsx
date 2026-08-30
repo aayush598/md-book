@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { EbookProject } from "@/lib/ebook-storage";
 
 interface NavigationPanelProps {
@@ -10,8 +10,6 @@ interface NavigationPanelProps {
 }
 
 export default function NavigationPanel({ project, activeChapterId, onChapterClick }: NavigationPanelProps) {
-  const [showRefs, setShowRefs] = useState(true);
-
   const chapters = useMemo(() =>
     [...project.chapters].sort((a, b) => a.order - b.order),
     [project.chapters]

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { EbookProject } from "@/lib/ebook-storage";
-import { runChecks, type CheckResult } from "@/lib/ebook-checks";
+import { runChecks } from "@/lib/ebook-checks";
 import { computeAnalytics } from "@/lib/ebook-analytics";
 
 interface ChecksPanelProps {

@@ -25,7 +25,7 @@ export function getCoverCss(cover: EbookCover, pageSize: string): string {
 `;
 }
 
-export function renderCoverPage(cover: EbookCover, pageSize: string): string {
+export function renderCoverPage(cover: EbookCover): string {
   // If cover image is present: full-bleed image page, no text
   if (cover.coverImage) {
     return `<div class="cover-page cover-image-page">

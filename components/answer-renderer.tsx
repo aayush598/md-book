@@ -95,7 +95,7 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 }
 
 const components = {
-  code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
+  code({ className, children }: { className?: string; children?: React.ReactNode }) {
     const isInline = !className;
     if (isInline) {
       return <InlineCode>{children}</InlineCode>;
