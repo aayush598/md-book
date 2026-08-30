@@ -69,3 +69,28 @@ export function indexPythonBlocks(fileContent: string): AnalyseQuestion[] {
 
   return out;
 }
+
+export interface SheetMatch {
+  questions: AnalyseQuestion[];
+  active: number;
+}
+
+/** Lookup from a runnable block's exact source text to its sibling questions. */
+export type SheetLookup = (code: string) => SheetMatch | null;
+
+/**
+ * Index every runnable Python block across a set of sheet files, so an
+ * "Analyse this solution" button anywhere in those files can hand the /analyse
+ * page the full prev/next list plus the active question's index.
+ */
+export function buildSheetLookup(fileContents: string[]): SheetLookup {
+  const m = new Map<string, SheetMatch>();
+  for (const content of fileContents) {
+    const list = indexPythonBlocks(content);
+    for (let i = 0; i < list.length; i++) {
+      const src = list[i].source;
+      if (!m.has(src)) m.set(src, { questions: list, active: i });
+    }
+  }
+  return (code: string) => m.get(code) ?? null;
+}

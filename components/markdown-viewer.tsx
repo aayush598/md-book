@@ -7,8 +7,6 @@ import { useState, useCallback, useMemo, type ReactNode, type HTMLAttributes } f
 import type { Components } from "react-markdown";
 import AnalyseButton from "@/components/viz/analyse-button";
 import { looksLikePython } from "@/lib/viz/pyodide";
-import { indexPythonBlocks } from "@/lib/viz/solutions-index";
-import { AnalyseCtx, type AnalyseLookup } from "@/components/viz/analyse-context";
 
 const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u25A0-\u25FF\u2190-\u21FF\u2080-\u2089\u25CB\u25A1\u25AA\u25AB\u25AC\u25AD]/;
 
@@ -252,21 +250,11 @@ interface MarkdownViewerProps {
 }
 
 export default function MarkdownViewer({ content, enableDropcap }: MarkdownViewerProps) {
-  const codeLookup = useMemo<AnalyseLookup>(() => {
-    const list = indexPythonBlocks(content);
-    return (code: string) => {
-      const i = list.findIndex((q) => q.source === code);
-      return i === -1 ? null : { questions: list, active: i };
-    };
-  }, [content]);
-
   return (
-    <AnalyseCtx.Provider value={codeLookup}>
-      <div className={`reader-prose ${enableDropcap ? "has-dropcap" : ""}`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-          {content}
-        </ReactMarkdown>
-      </div>
-    </AnalyseCtx.Provider>
+    <div className={`reader-prose ${enableDropcap ? "has-dropcap" : ""}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

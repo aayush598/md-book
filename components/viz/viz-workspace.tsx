@@ -93,6 +93,7 @@ const STORAGE_KEY = "md-book:viz-ws2";
 const DEFAULT_LEFT_PCT = 42;
 
 interface Persisted {
+  layout?: VizLayout;
   cols?: { left: VizPanelId[]; right: VizPanelId[] };
   height?: Partial<Record<VizPanelId, number>>;
   collapsed?: Partial<Record<VizPanelId, boolean>>;
@@ -136,14 +137,18 @@ export default function VizWorkspace({ contents, lockedHidden }: VizWorkspacePro
     el: HTMLElement | null;
   } | null>(null);
 
-  // Restore the user's arrangement once after mount (hydration-safe: only after first paint).
-  const restored = useRef(false);
+  // Restore the user's arrangement once after mount (hydration-safe: only after
+  // first paint). Persisting is gated on this flag, otherwise the persist effect
+  // below would overwrite the saved layout with the fresh default state before
+  // the restore has a chance to read it back.
+  const hydratedRef = useRef(false);
   useEffect(() => {
-    if (restored.current) return;
-    restored.current = true;
+    if (hydratedRef.current) return;
     const t = window.setTimeout(() => {
+      hydratedRef.current = true;
       const p = readPersisted();
       if (!p) return;
+      if (p.layout) setLayout(p.layout);
       if (p.cols) setCols(p.cols);
       if (p.height) setHeight(p.height);
       if (p.collapsed) setCollapsed(p.collapsed);
@@ -154,13 +159,14 @@ export default function VizWorkspace({ contents, lockedHidden }: VizWorkspacePro
   }, []);
 
   useEffect(() => {
-    const p: Persisted = { cols, height, collapsed, hidden: [...userHidden], leftPct };
+    if (!hydratedRef.current) return;
+    const p: Persisted = { layout, cols, height, collapsed, hidden: [...userHidden], leftPct };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
     } catch {
       /* storage unavailable — ignore */
     }
-  }, [cols, height, collapsed, userHidden, leftPct]);
+  }, [layout, cols, height, collapsed, userHidden, leftPct]);
 
   const hiddenSet = useMemo(() => {
     const s = new Set<VizPanelId>(userHidden);
@@ -267,6 +273,7 @@ export default function VizWorkspace({ contents, lockedHidden }: VizWorkspacePro
   }, [layout]);
 
   const resetLayout = () => {
+    setLayout("split");
     setCols(DEFAULT_COLS);
     setHeight({});
     setCollapsed({});

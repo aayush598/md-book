@@ -491,6 +491,10 @@ export default function VizStudio({
             <div className="viz-question-body">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{questionMd}</ReactMarkdown>
             </div>
+          ) : curQ?.title || title ? (
+            <p className="viz-question-body text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              {curQ?.title || title}
+            </p>
           ) : (
             <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
               No statement text saved for this question.

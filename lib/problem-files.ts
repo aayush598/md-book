@@ -49,8 +49,26 @@ export function parseProblemFile(content: string, path = ""): ProblemFile {
     if (curSection.content) curProblem.sections.push(curSection);
   };
 
+  // Content (often the runnable solution) that sits right under the `## N.`
+  // heading, before the first `###` subsection, isn't owned by any section —
+  // keep it as an implicit "Solution"/"Overview" section so it isn't lost.
+  const pushImplicit = () => {
+    if (!curProblem || curSection) return;
+    const body = curBody.join("\n").trim();
+    if (!body) return;
+    const isCode = /^```/m.test(body);
+    curProblem.sections.push({
+      id: slug(isCode ? "solution" : "overview"),
+      title: isCode ? "Solution" : "Overview",
+      content: body,
+      hasCode: isCode,
+    });
+    curBody = [];
+  };
+
   const finalizeProblem = () => {
     if (!curProblem) return;
+    pushImplicit();
     finalizeSection();
     curProblem.hasCode = curProblem.sections.some((s) => s.hasCode);
     problems.push(curProblem);
@@ -85,6 +103,7 @@ export function parseProblemFile(content: string, path = ""): ProblemFile {
         curSection = null;
         curBody = [];
       } else {
+        pushImplicit();
         finalizeSection();
         curSection = curProblem
           ? { id: slug(text), title: text, content: "", hasCode: false }

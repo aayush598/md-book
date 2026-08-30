@@ -22,6 +22,8 @@ import SpokenText from "@/components/spoken-text";
 import { isSoundMuted, toggleSound, subscribeToSoundMuted } from "@/lib/sounds";
 import { saveProject as saveEbookProject } from "@/lib/ebook-storage";
 import { defaultTheme } from "@/lib/ebook-theme";
+import { buildSheetLookup } from "@/lib/viz/solutions-index";
+import { AnalyseCtx } from "@/components/viz/analyse-context";
 
 interface LoadedFile {
   path: string;
@@ -303,6 +305,14 @@ export default function BookPage() {
   const fileBlocks = useMemo(() => loadedFiles.map((f) => splitBlocks(f.content)), [loadedFiles]);
   const fileBlocksRef = useRef(fileBlocks);
   fileBlocksRef.current = fileBlocks;
+
+  // Whole-file index of every runnable Python block, so the "Analyse this
+  // solution" button under any block hands /analyse the full sibling-question
+  // list (prev/next + question jump), instead of just the one block on screen.
+  const analyseLookup = useMemo(
+    () => buildSheetLookup(loadedFiles.map((f) => f.content)),
+    [loadedFiles]
+  );
 
   const stopReaderTts = useCallback(() => {
     ttsRunIdRef.current += 1;
@@ -699,6 +709,7 @@ export default function BookPage() {
           <ProblemsView files={loadedFiles} currentPath={anchorFile} />
         ) : (
           <main ref={mainRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" style={{ background: "transparent" }} tabIndex={0}>
+            <AnalyseCtx.Provider value={analyseLookup}>
             <div className="mx-auto max-w-2xl px-6 py-20 sm:px-8 lg:px-10 lg:py-24">
 
               {loadedFiles.map((file, fileIndex) => {
@@ -862,6 +873,7 @@ export default function BookPage() {
                 </div>
               )}
             </div>
+            </AnalyseCtx.Provider>
           </main>
         )}
       </div>

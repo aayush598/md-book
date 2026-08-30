@@ -8,9 +8,8 @@ import type { Components } from "react-markdown";
 import { parseProblemFile, type Problem, type ProblemFile } from "@/lib/problem-files";
 import AnalyseButton from "@/components/viz/analyse-button";
 import { looksLikePython } from "@/lib/viz/pyodide";
-import { indexPythonBlocks } from "@/lib/viz/solutions-index";
-import { AnalyseCtx, type AnalyseLookup } from "@/components/viz/analyse-context";
-import type { AnalyseQuestion } from "@/lib/viz/analyse-session";
+import { buildSheetLookup } from "@/lib/viz/solutions-index";
+import { AnalyseCtx } from "@/components/viz/analyse-context";
 
 interface ProblemsViewProps {
   files: { path: string; content: string }[];
@@ -411,20 +410,13 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
 
   const onExpandCode = useCallback((info: CodeViewInfo) => setCodeView(info), []);
 
-  // Every runnable python block in the current sheet -> its sibling question
-  // list + this block's index, so AnalyseButton can hand the /analyse page
-  // full prev/next navigation and the question text.
-  const codeLookup = useMemo<AnalyseLookup>(() => {
-    const m = new Map<string, { questions: AnalyseQuestion[]; active: number }>();
-    for (const f of files) {
-      const list = indexPythonBlocks(f.content);
-      for (let i = 0; i < list.length; i++) {
-        const src = list[i].source;
-        if (!m.has(src)) m.set(src, { questions: list, active: i });
-      }
-    }
-    return (code: string) => m.get(code) ?? null;
-  }, [files]);
+  // Every runnable python block across all sheets -> its sibling question list
+  // + this block's index, so AnalyseButton can hand the /analyse page full
+  // prev/next navigation and the question text.
+  const codeLookup = useMemo(
+    () => buildSheetLookup(files.map((f) => f.content)),
+    [files]
+  );
 
   return (
     <AnalyseCtx.Provider value={codeLookup}>
