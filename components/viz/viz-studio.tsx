@@ -7,7 +7,9 @@ import { visualisePython } from "@/lib/viz/pyodide";
 import type { VizTrace } from "@/lib/viz/types";
 import type { AnalyseQuestion } from "@/lib/viz/analyse-session";
 import { callArgsText, replaceCallArgs } from "@/lib/viz/custom-input";
+import { questionKey, progressFor, readQuestionStatuses, writeQuestionStatuses, type QuestionStatus } from "@/lib/question-status";
 import VizStage from "./viz-stage";
+import { StatusControl } from "./question-status";
 import { ACCENT } from "./primitives";
 
 export type Phase = "loading" | "ready" | "error";
@@ -15,6 +17,8 @@ export type Phase = "loading" | "ready" | "error";
 interface VizStudioProps {
   source: string;
   title?: string;
+  /** Sheet file path, for progress tracking (status toggles). */
+  path?: string;
   /** Sibling questions in the sheet (prev/next + question text). */
   questions?: AnalyseQuestion[];
   active?: number;
@@ -74,6 +78,7 @@ function ToolbarBtn({
 export default function VizStudio({
   source,
   title,
+  path,
   questions,
   active,
   onBack,
@@ -107,6 +112,14 @@ export default function VizStudio({
   // The first source this page session saw (before any custom input), kept
   // across URL replaces so Reset can return to it. Initialized once.
   const [baseSource] = useState<string>(source);
+
+  // Per-question progress (pending / attempted / completed), shared with the
+  // "Coding questions" browser via localStorage (keyed `path#number`).
+  const [statuses, setStatuses] = useState<Record<string, QuestionStatus>>({});
+  useEffect(() => {
+    const t = window.setTimeout(() => setStatuses(readQuestionStatuses()), 0);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const start = useCallback(async (src: string) => {
     setPhase("loading");
@@ -199,6 +212,24 @@ export default function VizStudio({
     },
     [canNav, onNavigate, qCount]
   );
+
+  // Active question's progress status. Only meaningful when we know the sheet
+  // path; the question number is preferred, the title is the fallback key.
+  const statusKey = path && curQ ? questionKey(path, curQ.number ?? curQ.title) : null;
+  const curStatus: QuestionStatus | null = statusKey ? (statuses[statusKey] ?? "pending") : null;
+  const setStatus = useCallback(
+    (s: QuestionStatus) => {
+      if (!statusKey) return;
+      setStatuses((prev) => {
+        const next = { ...prev, [statusKey]: s };
+        writeQuestionStatuses(next);
+        return next;
+      });
+    },
+    [statusKey]
+  );
+
+  const progress = progressFor(statuses, questions ?? [], path);
 
   // ---- Custom input ----
   const applyInput = useCallback(() => {
@@ -435,6 +466,22 @@ export default function VizStudio({
               </svg>
             </ToolbarBtn>
             <span className="viz-step-count hidden sm:inline">{activeIdx + 1}/{qCount}</span>
+            {curStatus !== null && (
+              <>
+                <div className="mx-1 h-4 w-px" style={{ background: "var(--border-subtle)" }} />
+                <StatusControl value={curStatus} onChange={setStatus} />
+                {progress && (
+                  <>
+                    <div className="ml-1.5 h-1 w-8 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                      <div className="h-full rounded-full" style={{ width: `${progress.pct}%`, background: "#22c55e" }} />
+                    </div>
+                    <span className="viz-step-count" title={`${progress.completed} of ${progress.total} questions done`}>
+                      {progress.pct}%
+                    </span>
+                  </>
+                )}
+              </>
+            )}
             <div className="mx-1 h-4 w-px" style={{ background: "var(--border-subtle)" }} />
           </>
         )}

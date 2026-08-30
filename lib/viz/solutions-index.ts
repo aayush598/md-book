@@ -13,6 +13,7 @@ const PYTHON_LANGS = new Set(["python", "py", "python3", "python2"]);
 export function indexPythonBlocks(fileContent: string): AnalyseQuestion[] {
   const out: AnalyseQuestion[] = [];
   let title = "Exercises";
+  let number = "";
   let sectionText: string[] = [];
   let inCode = false;
   let langOk = false;
@@ -23,6 +24,7 @@ export function indexPythonBlocks(fileContent: string): AnalyseQuestion[] {
       const source = code.replace(/\n+$/, "");
       const question = sectionText.join("\n").trim().replace(/\n{3,}/g, "\n\n");
       const item: AnalyseQuestion = { title, source };
+      if (number) item.number = number;
       if (question && question.length > 0) item.question = question.slice(0, 2400);
       out.push(item);
     }
@@ -37,6 +39,7 @@ export function indexPythonBlocks(fileContent: string): AnalyseQuestion[] {
         const text = heading[2].trim();
         if (heading[1].length <= 2) {
           flush();
+          number = /^(\d+)[\.\)]\s*/.exec(text)?.[1] ?? "";
           title = text
             .replace(/^\d+[\.\)]\s*/, "")
             .replace(/[#]\s*\d+.*$/, "")
@@ -73,6 +76,8 @@ export function indexPythonBlocks(fileContent: string): AnalyseQuestion[] {
 export interface SheetMatch {
   questions: AnalyseQuestion[];
   active: number;
+  /** Sheet file path, for progress tracking (`path#number`). */
+  path?: string;
 }
 
 /** Lookup from a runnable block's exact source text to its sibling questions. */
@@ -83,13 +88,13 @@ export type SheetLookup = (code: string) => SheetMatch | null;
  * "Analyse this solution" button anywhere in those files can hand the /analyse
  * page the full prev/next list plus the active question's index.
  */
-export function buildSheetLookup(fileContents: string[]): SheetLookup {
+export function buildSheetLookup(files: { path: string; content: string }[]): SheetLookup {
   const m = new Map<string, SheetMatch>();
-  for (const content of fileContents) {
-    const list = indexPythonBlocks(content);
+  for (const file of files) {
+    const list = indexPythonBlocks(file.content);
     for (let i = 0; i < list.length; i++) {
       const src = list[i].source;
-      if (!m.has(src)) m.set(src, { questions: list, active: i });
+      if (!m.has(src)) m.set(src, { questions: list, active: i, path: file.path });
     }
   }
   return (code: string) => m.get(code) ?? null;

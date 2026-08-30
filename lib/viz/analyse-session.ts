@@ -15,11 +15,15 @@ export interface AnalyseQuestion {
   source: string;
   /** Markdown of the question statement, kept short. */
   question?: string;
+  /** Question number, when the heading carried one (`## 12. ...`). */
+  number?: string;
 }
 
 export interface AnalysePayload {
   source: string;
   title?: string;
+  /** Path of the sheet file this question came from (for progress tracking). */
+  path?: string;
   /** Sibling questions in the same sheet, for prev/next navigation. */
   questions?: AnalyseQuestion[];
   /** Index of this payload's source inside `questions`. */
@@ -63,6 +67,7 @@ function loadAnalysePayload(): AnalysePayload | null {
     return {
       source: parsed.source,
       title: typeof parsed.title === "string" ? parsed.title : undefined,
+      path: typeof parsed.path === "string" ? parsed.path : undefined,
       questions: Array.isArray(parsed.questions)
         ? parsed.questions.filter(
             (q): q is AnalyseQuestion =>

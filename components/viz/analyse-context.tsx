@@ -6,6 +6,8 @@ import type { AnalyseQuestion } from "@/lib/viz/analyse-session";
 export interface AnalyseMeta {
   questions: AnalyseQuestion[];
   active: number;
+  /** Sheet file path, for progress tracking (`path#number`). */
+  path?: string;
 }
 
 export type AnalyseLookup = (code: string) => AnalyseMeta | null;

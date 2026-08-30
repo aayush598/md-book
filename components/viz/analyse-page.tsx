@@ -26,6 +26,7 @@ export default function AnalysePage() {
       return {
         source: src,
         title: titleParam || undefined,
+        path: !store.loading ? store.payload?.path : undefined,
         // Enrich with sibling questions when the session still knows them.
         questions: !store.loading ? store.payload?.questions : undefined,
         active: !store.loading && store.payload?.questions
@@ -49,10 +50,11 @@ export default function AnalysePage() {
 
   const handleNavigate = useCallback(
     (index: number) => {
+      const sheetPath = !store.loading ? store.payload?.path : undefined;
       const questions = !store.loading ? store.payload?.questions : undefined;
       if (!questions || !questions[index]) return;
       const q = questions[index];
-      storeAnalysePayload({ source: q.source, title: q.title, questions, active: index });
+      storeAnalysePayload({ source: q.source, title: q.title, path: sheetPath, questions, active: index });
       replaceUrl(q.source, q.title);
     },
     [store, replaceUrl]
@@ -60,11 +62,13 @@ export default function AnalysePage() {
 
   const handleSourceChange = useCallback(
     (nextSource: string, nextTitle?: string) => {
+      const sheetPath = !store.loading ? store.payload?.path : undefined;
       const questions = !store.loading ? store.payload?.questions : undefined;
       const active = questions ? Math.max(0, questions.findIndex((q) => q.source === nextSource)) : undefined;
       storeAnalysePayload({
         source: nextSource,
         title: nextTitle || titleParam || undefined,
+        path: sheetPath,
         questions,
         active,
       });
@@ -105,6 +109,7 @@ export default function AnalysePage() {
     <VizStudio
       source={payload.source}
       title={payload.title}
+      path={payload.path}
       questions={payload.questions}
       active={payload.active}
       onBack={() => router.back()}

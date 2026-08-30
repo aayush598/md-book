@@ -310,7 +310,7 @@ export default function BookPage() {
   // solution" button under any block hands /analyse the full sibling-question
   // list (prev/next + question jump), instead of just the one block on screen.
   const analyseLookup = useMemo(
-    () => buildSheetLookup(loadedFiles.map((f) => f.content)),
+    () => buildSheetLookup(loadedFiles.map((f) => ({ path: f.path, content: f.content }))),
     [loadedFiles]
   );
 

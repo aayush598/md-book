@@ -20,6 +20,7 @@ export default function AnalyseButton({ source, title }: { source: string; title
           storeAnalysePayload({
             source,
             title: q?.title || title,
+            path: meta?.path,
             questions: meta?.questions,
             active: meta?.active,
           });

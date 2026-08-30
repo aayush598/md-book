@@ -10,6 +10,14 @@ import AnalyseButton from "@/components/viz/analyse-button";
 import { looksLikePython } from "@/lib/viz/pyodide";
 import { buildSheetLookup } from "@/lib/viz/solutions-index";
 import { AnalyseCtx } from "@/components/viz/analyse-context";
+import { StatusControl } from "@/components/viz/question-status";
+import {
+  progressFor,
+  questionKey,
+  readQuestionStatuses,
+  writeQuestionStatuses,
+  type QuestionStatus,
+} from "@/lib/question-status";
 
 interface ProblemsViewProps {
   files: { path: string; content: string }[];
@@ -285,6 +293,7 @@ function Chevron({ open }: { open: boolean }) {
 function ProblemCard({
   problem,
   open, onToggle, onSectionToggle, expandedSections, onExpandCode,
+  status, onStatusChange,
 }: {
   problem: Problem;
   open: boolean;
@@ -292,17 +301,23 @@ function ProblemCard({
   onSectionToggle: (id: string) => void;
   expandedSections: Set<string>;
   onExpandCode: (info: CodeViewInfo) => void;
+  status: QuestionStatus;
+  onStatusChange: (s: QuestionStatus) => void;
 }) {
   const diff = problem.difficulty;
   const diffColor = DIFF_COLORS[diff] || DIFF_COLORS.None;
 
   return (
     <div className="overflow-hidden rounded-xl" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center gap-3 px-3 sm:px-4 py-3 text-left transition-colors"
+      <div
+        className="flex items-stretch gap-2 pr-1 sm:pr-2"
         style={{ background: open ? "var(--accent-bg)" : "transparent" }}
       >
+        <button
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-3 px-3 sm:px-4 py-3 text-left transition-colors"
+          style={{ background: "transparent" }}
+        >
         <Chevron open={open} />
         <span
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
@@ -328,7 +343,9 @@ function ProblemCard({
             {diff}
           </span>
         )}
-      </button>
+        </button>
+        <StatusControl value={status} onChange={onStatusChange} />
+      </div>
 
       {open && (
         <div className="px-3 sm:px-4 pb-3 pt-2 space-y-2">
@@ -375,6 +392,22 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
   const [filter, setFilter] = useState("");
   const [codeView, setCodeView] = useState<CodeViewInfo | null>(null);
 
+  // Per-question progress (pending / attempted / completed), stored locally and
+  // hydrated once after mount so hydration never mismatches.
+  const [statuses, setStatuses] = useState<Record<string, QuestionStatus>>({});
+  useEffect(() => {
+    const t = window.setTimeout(() => setStatuses(readQuestionStatuses()), 0);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const setStatus = useCallback((path: string, number: string, s: QuestionStatus) => {
+    setStatuses((prev) => {
+      const next = { ...prev, [questionKey(path, number)]: s };
+      writeQuestionStatuses(next);
+      return next;
+    });
+  }, []);
+
   const parsed = useMemo(() => {
     const map = new Map<string, ProblemFile>();
     for (const f of files) map.set(f.path, parseProblemFile(f.content, f.path));
@@ -386,6 +419,10 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
 
   const withProblems = Array.from(parsed.values()).filter((pf) => pf.problems.length > 0);
   const visible = problems.filter((p) => !filter || p.title.toLowerCase().includes(filter.toLowerCase()));
+
+  const statusOf = (p: Problem): QuestionStatus =>
+    statuses[questionKey(activeFile?.path ?? "", p.number)] ?? "pending";
+  const progress = progressFor(statuses, problems, activeFile?.path);
 
   const toggleProblem = useCallback((id: string) => {
     setOpenProblems((prev) => {
@@ -414,7 +451,7 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
   // + this block's index, so AnalyseButton can hand the /analyse page full
   // prev/next navigation and the question text.
   const codeLookup = useMemo(
-    () => buildSheetLookup(files.map((f) => f.content)),
+    () => buildSheetLookup(files.map((f) => ({ path: f.path, content: f.content }))),
     [files]
   );
 
@@ -466,9 +503,20 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
                 <h2 className="text-base sm:text-lg font-bold tracking-tight truncate" style={{ color: "var(--text-primary)" }}>
                   {activeFile?.title}
                 </h2>
-                <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                  {problems.length} problem{problems.length === 1 ? "" : "s"} · {problems.filter((p) => p.difficulty === "Hard").length} hard
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <div className="h-1.5 w-28 sm:w-36 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{ width: `${progress?.pct ?? 0}%`, background: "#22c55e" }}
+                    />
+                  </div>
+                  <span className="text-[11px] font-semibold" style={{ color: progress?.pct === 100 ? "#22c55e" : "var(--text-muted)" }}>
+                    {progress?.pct ?? 0}% complete
+                  </span>
+                  <span className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                    · {progress ? `${progress.completed} done · ${progress.attempted} attempted · ${progress.pending} pending` : `${problems.length} problem${problems.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
               </div>
               <div className="relative w-full sm:w-56 shrink-0">
                 <svg className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "var(--text-muted)" }}>
@@ -496,6 +544,8 @@ export default function ProblemsView({ files, currentPath }: ProblemsViewProps) 
                   onSectionToggle={toggleSection}
                   expandedSections={expandedSections}
                   onExpandCode={onExpandCode}
+                  status={statusOf(problem)}
+                  onStatusChange={(s) => setStatus(activeFile.path, problem.number, s)}
                 />
               ))
             )}
