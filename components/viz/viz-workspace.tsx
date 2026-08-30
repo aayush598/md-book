@@ -86,10 +86,10 @@ const STACK_H: Partial<Record<VizPanelId, number>> = { code: 240, feed: 210, gra
 
 const DEFAULT_COLS: { left: VizPanelId[]; right: VizPanelId[] } = {
   left: ["code", "feed"],
-  right: ["caption", "condition", "graphs", "changed", "vars"],
+  right: ["caption", "condition", "vars", "graphs", "changed"],
 };
 
-const STORAGE_KEY = "md-book:viz-ws2";
+const STORAGE_KEY = "md-book:viz-ws3";
 const DEFAULT_LEFT_PCT = 42;
 
 interface Persisted {

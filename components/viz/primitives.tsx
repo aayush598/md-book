@@ -246,7 +246,7 @@ export function changeLabel(c: Change): { text: string; color: string } {
   let text: string;
   let color: string = MUT;
   if (c.kind === "init") {
-    text = `${c.name} created`;
+    text = c.val !== undefined ? `${c.name} = ${val(c.val)}` : `${c.name} created`;
     color = ACCENT;
   } else if (c.kind === "append") {
     text = `${c.name} ← +${val(c.val)}`;
@@ -377,17 +377,20 @@ export function ChangeFeed({ feed, collapsed = false }: { feed: FeedItem[]; coll
         <div className="viz-feed-list">
           {feed.map((it) => {
             const live = it.step === feed[0].step;
-            const chip = it.changes[0] ? changeLabel(it.changes[0]) : null;
+            const chips = it.changes.slice(0, 2);
             return (
               <div key={it.step} className={`viz-feed-item ${live ? "viz-feed-live" : ""}`}>
                 <span className="viz-feed-step">{it.step + 1}</span>
                 <span className="viz-feed-line">L{it.line + 1}</span>
                 <span className="viz-feed-label">{it.label || "—"}</span>
-                {chip && (
-                  <span className="viz-feed-chip" style={{ borderColor: `${chip.color}66`, color: chip.color }}>
-                    {chip.text}
-                  </span>
-                )}
+                {chips.map((c, k) => {
+                  const { text, color } = changeLabel(c);
+                  return (
+                    <span key={k} className="viz-feed-chip" style={{ borderColor: `${color}66`, color }}>
+                      {text}
+                    </span>
+                  );
+                })}
               </div>
             );
           })}

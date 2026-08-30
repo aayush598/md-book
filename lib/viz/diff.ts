@@ -111,9 +111,13 @@ export function diffStep(
       continue;
     }
 
-    // scalar change worth surfacing
-    if (isVal(snap) && prevSnap && isVal(prevSnap) && !same(prevSnap.v, snap.v)) {
-      changes.push({ name, kind: "set", old: prevSnap.v, val: snap.v });
+    // scalar change worth surfacing (a brand-new variable shows as "created")
+    if (isVal(snap)) {
+      if (!prevSnap) {
+        changes.push({ name, kind: "init", val: snap.v });
+      } else if (isVal(prevSnap) && !same(prevSnap.v, snap.v)) {
+        changes.push({ name, kind: "set", old: prevSnap.v, val: snap.v });
+      }
     }
   }
 

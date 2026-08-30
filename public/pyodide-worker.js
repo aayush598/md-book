@@ -600,12 +600,17 @@ def caption(node, g, l, srcline):
         if isinstance(node.iter, ast.Call) and getattr(node.iter.func, "id", "") == "range":
             args = [safe_eval(a, g, l) for a in node.iter.args]
             if None not in args:
+                if len(args) >= 2:
+                    start, end = args[0], args[1]
+                elif len(args) == 1:
+                    start, end = 0, args[0]
+                else:
+                    start, end = 0, 0
                 step = args[2] if len(args) > 2 and args[2] is not None else 1
-                start = args[0] if len(args) > 1 else 0
                 cur = l.get(varname)
                 shown = cur if cur is not None else start
-                end = args[1] if len(args) > 1 else step
-                return f"Loop: {varname} = {fmt(shown)} over range({fmt(args[0] if len(args)>1 else 0)}, {fmt(end)})"
+                step_suffix = f", {fmt(step)}" if step != 1 else ""
+                return f"Loop: {varname} = {fmt(shown)} over range({fmt(start)}, {fmt(end)}){step_suffix}"
         return f"Iterate each value into {varname}"
 
     if kind == "While":
