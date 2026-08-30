@@ -131,6 +131,12 @@ export default function Home() {
               </svg>
               Create Ebook
             </Link>
+            <Link href="/playground" className="flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-white/50 px-4 py-1.5 text-xs font-medium text-violet-600 transition-all hover:border-violet-300 hover:bg-white hover:text-violet-800">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+              </svg>
+              Playground
+            </Link>
             <button onClick={toggleSound}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100"
               title={soundMuted ? "Unmute sounds" : "Mute sounds"}>
