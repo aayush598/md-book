@@ -64,6 +64,22 @@ const BOOKS_CONFIG: BookConfig[] = [
     name: "Infosys SP DSE Preparation",
     id: "infosys-sp-dse",
   },
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "Infosys-SP-DSE-Interview-Prep",
+    name: "Infosys SP DSE Interview Prep",
+    id: "infosys-sp-dse-interview",
+  },
+  {
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "ISRO_CBT_ECE_Prep",
+    name: "ISRO CBT ECE Prep",
+    id: "isro-cbt-ece",
+  },
 ];
 
 interface GitTreeItem {
