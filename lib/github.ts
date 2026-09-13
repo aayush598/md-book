@@ -22,73 +22,7 @@ export interface Book {
   chapters: BookChapter[];
 }
 
-export interface BookConfig {
-  owner: string;
-  repo: string;
-  branch: string;
-  path: string;
-  name: string;
-  id: string;
-}
-
-const BOOKS_CONFIG: BookConfig[] = [
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "samora-ai",
-    name: "Samora AI",
-    id: "samora-ai",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "subject/os",
-    name: "Operating Systems",
-    id: "os",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "interview_prep_june/dsa_java",
-    name: "DSA Java",
-    id: "dsa-java",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "Infosys_SP_DSE_Preparation",
-    name: "Infosys SP DSE Preparation",
-    id: "infosys-sp-dse",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "Infosys-SP-DSE-Interview-Prep",
-    name: "Infosys SP DSE Interview Prep",
-    id: "infosys-sp-dse-interview",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "subject/sql-queries",
-    name: "SQL Queries",
-    id: "sql-queries",
-  },
-  {
-    owner: "aayush598",
-    repo: "learn-techstacks",
-    branch: "main",
-    path: "ISRO_CBT_ECE_Prep",
-    name: "ISRO CBT ECE Prep",
-    id: "isro-cbt-ece",
-  },
-];
+import type { BookConfig } from "@/lib/books";
 
 interface GitTreeItem {
   path: string;
@@ -195,14 +129,6 @@ export async function fetchFileContent(config: BookConfig, path: string): Promis
   const res = await fetch(url, { cache: "no-cache" });
   if (!res.ok) throw new Error(`Failed to fetch file ${path}: ${res.status}`);
   return res.text();
-}
-
-export function getBookConfig(bookId: string): BookConfig | undefined {
-  return BOOKS_CONFIG.find((b) => b.id === bookId);
-}
-
-export function getAllBookConfigs(): BookConfig[] {
-  return [...BOOKS_CONFIG];
 }
 
 export function normalizeName(name: string): string {

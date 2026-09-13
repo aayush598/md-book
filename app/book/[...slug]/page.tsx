@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { Book, getBookConfig, getBookTree, fetchFileContent, normalizeName, type BookConfig } from "@/lib/github";
+import { Book, getBookTree, fetchFileContent, normalizeName } from "@/lib/github";
+import { getBookConfig, type BookConfig } from "@/lib/books";
 import { useReadingSettings } from "@/lib/reading-settings";
 import {
   parseBookSlug, isBookmarked, addBookmark, removeBookmark,
