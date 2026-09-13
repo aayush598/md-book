@@ -173,6 +173,11 @@ export default function BookPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once bootstrap guarded by loadedRef
   }, [config?.id]);
 
+  // Make every open tab show which ebook it holds, e.g. "mdbooks - Samora AI".
+  useEffect(() => {
+    if (book) document.title = `mdbooks - ${book.name}`;
+  }, [book]);
+
   const loadNextFile = useCallback(() => {
     if (loadingNext || !config) return;
     const lastLoaded = loadedFiles[loadedFiles.length - 1];
@@ -502,6 +507,8 @@ export default function BookPage() {
         style={{ background: "var(--glass-bg)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid var(--border-subtle)" }}
       >
         <div className="flex items-center gap-3 px-4 py-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/mdbooks-logo.svg" alt="mdbooks" className="h-7 w-7 shrink-0 rounded-lg" />
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"

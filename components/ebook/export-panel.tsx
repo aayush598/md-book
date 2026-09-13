@@ -116,7 +116,7 @@ ${commonHeadStyles(printMode)}
 ${coverHtml}
 ${bodyHtml}
 <footer class="doc-footer" style="text-align:center;padding:1em 0;font-size:0.75em;color:#999;border-top:1px solid #ddd;margin-top:2em">
-  <p>Generated with md book \u00b7 ${new Date().toLocaleDateString()}</p>
+  <p>Generated with mdbooks \u00b7 ${new Date().toLocaleDateString()}</p>
 </footer>
 </body>
 </html>`;

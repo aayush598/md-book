@@ -174,7 +174,7 @@ ${tocItems}
 <dc:title>${escapeXml(project.name)}</dc:title>
 <dc:creator opf:role="aut">${escapeXml(project.author)}</dc:creator>
 <dc:language>en</dc:language>
-<dc:publisher>md book</dc:publisher>
+<dc:publisher>mdbooks</dc:publisher>
 <dc:date>${new Date().toISOString().split("T")[0]}</dc:date>
 ${project.cover.showCoverPage ? '<meta name="cover" content="cover"/>' : ""}
 </metadata>

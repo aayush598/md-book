@@ -15,8 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "md book — Read Tech Ebooks",
+  title: "mdbooks - Read Tech Ebooks",
   description: "Beautifully rendered technical ebooks from GitHub repositories",
+  icons: {
+    icon: "/mdbooks-logo.svg",
+  },
 };
 
 export default function RootLayout({

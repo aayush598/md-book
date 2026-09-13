@@ -143,12 +143,9 @@ export default function Home() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-200">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-zinc-800">md book</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/mdbooks-logo.svg" alt="mdbooks" className="h-8 w-8 rounded-lg shadow-lg shadow-violet-200" />
+            <span className="text-sm font-semibold tracking-tight text-zinc-800">mdbooks</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/ebook" className="flex items-center gap-1.5 rounded-full border border-zinc-200/60 bg-white/50 px-4 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:border-zinc-300 hover:bg-white hover:text-zinc-800">
@@ -348,7 +345,7 @@ export default function Home() {
 
       <footer className="border-t border-zinc-200/60 bg-white/40">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-zinc-400">
-          <span>md book &mdash; open-source knowledge</span>
+          <span>mdbooks - open-source knowledge</span>
           <div className="flex items-center gap-4">
             <span>Built with Next.js</span>
             <a href="https://github.com/aayush598/learn-techstacks" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-600 transition-colors">

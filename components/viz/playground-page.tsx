@@ -144,12 +144,9 @@ export default function PlaygroundPage() {
       <div className="viz-dark flex h-full flex-col overflow-y-auto" style={{ background: "#0d1117", color: "#e6edf3" }}>
         <div className="viz-play-top">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: "linear-gradient(135deg,#7c3aed,#4f46e5)", color: "white" }}>
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <span className="text-sm font-semibold tracking-tight">md book</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/mdbooks-logo.svg" alt="mdbooks" className="h-7 w-7 rounded-lg" />
+            <span className="text-sm font-semibold tracking-tight">mdbooks</span>
             <span className="viz-chip" style={{ background: "rgba(88,166,255,0.12)", color: ACCENT, border: "1px solid rgba(88,166,255,0.3)", fontSize: 10 }}>
               Playground
             </span>
