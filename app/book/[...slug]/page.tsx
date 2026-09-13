@@ -723,7 +723,7 @@ export default function BookPage() {
              onClick={() => setSidebarOpen(false)} />
       )}
 
-      <div className={`fixed inset-y-0 left-0 z-40 transition-all duration-300 ease-out ${sidebarPinned ? "lg:relative" : "lg:absolute"}`} style={{ transform: sidebarOpen ? 'translateX(0)' : 'translateX(calc(-100% - 12px))' }}>
+      <div className={`fixed inset-y-0 left-0 z-40 overflow-hidden transition-all duration-300 ease-out ${sidebarOpen ? "max-w-full" : "max-w-0"} ${sidebarPinned ? "lg:relative" : "lg:absolute"}`} style={{ transform: sidebarOpen ? 'translateX(0)' : 'translateX(calc(-100% - 12px))' }}>
         <Sidebar
           chapters={book.chapters}
           currentFile={anchorFile}
