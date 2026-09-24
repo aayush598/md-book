@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 public/samples
+# python venv for schemdraw circuit rendering
+/.circuit-venv/
+/scripts/__pycache__/
