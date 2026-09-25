@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Creates the isolated schemdraw venv used by md_book's ECE circuit renderer
-# (app/api/circuit -> scripts/render_circuit.py). Run once after cloning:
+# Creates an isolated schemdraw venv for LOCAL TESTING of lib/viz/circuit.py.
+# The app itself renders circuits in the browser via Pyodide, so this venv is
+# not needed at runtime or in production. Run once after cloning:
 #
 #   bash scripts/setup_circuit_venv.sh
 #
+# Then, to test a snippet against the real renderer:
+#   "${HOME}/.cache/md_book/.circuit-venv/bin/python" -c \
+#     "import sys; sys.path.insert(0,'lib/viz'); import circuit; print(circuit.render_circuit(open('/tmp/snippet.py').read()))"
 set -euo pipefail
 
 VENV_DIR="${HOME}/.cache/md_book/.circuit-venv"
