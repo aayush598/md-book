@@ -6,6 +6,7 @@ import hljs from "highlight.js";
 import { useState, useCallback, useMemo, type ReactNode, type HTMLAttributes } from "react";
 import type { Components } from "react-markdown";
 import AnalyseButton from "@/components/viz/analyse-button";
+import CircuitFence from "@/components/circuit-fence";
 import { looksLikePython } from "@/lib/viz/pyodide";
 
 const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u25A0-\u25FF\u2190-\u21FF\u2080-\u2089\u25CB\u25A1\u25AA\u25AB\u25AC\u25AD]/;
@@ -80,6 +81,14 @@ function RoadmapBlock({ lines }: { lines: string[] }) {
 
 function CodeBlock({ className, children, ...props }: MdBlockProps) {
   const text = String(children);
+
+  const langMatch = /language-([\w+-]+)/.exec(className || "");
+  const rawLang = langMatch ? langMatch[1].toLowerCase() : "";
+
+  // ```circuit fences render as inline schemdraw schematics in the browser.
+  if (rawLang === "circuit" || rawLang === "schemdraw") {
+    return <CircuitFence source={text.replace(/\n$/, "")} />;
+  }
 
   if (isDiagram(text)) {
     return <DiagramBlock>{children}</DiagramBlock>;

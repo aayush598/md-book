@@ -73,6 +73,25 @@ export async function visualisePython(source: string): Promise<VizTrace> {
   return payload as VizTrace;
 }
 
+/**
+ * Renders a schemdraw snippet to an inline SVG string entirely in the browser
+ * (Pyodide worker + schemdraw). No server endpoint and no file is ever written,
+ * so the schematic stays inside the page.
+ */
+export async function renderCircuit(source: string): Promise<string> {
+  if (typeof window === "undefined") {
+    throw new Error("circuits render in the browser only");
+  }
+  await loadVizEngine();
+  const payload = (await callWorker({ type: "circuit", source })) as {
+    svg?: string;
+  };
+  if (!payload || typeof payload.svg !== "string" || !payload.svg.includes("<svg")) {
+    throw new Error("schemdraw returned no SVG");
+  }
+  return payload.svg;
+}
+
 /** Quick heuristic: does this look like a runnable algorithm we can animate? */
 export function looksLikePython(code: string): boolean {
   if (!code || code.length > 12_000) return false;
