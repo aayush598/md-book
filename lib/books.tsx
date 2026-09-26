@@ -146,6 +146,24 @@ export const BOOKS: BookInfo[] = [
       </svg>
     ),
   },
+  {
+    id: "freelancing-mastery",
+    name: "Freelancing Mastery",
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "freelancing-mastery",
+    description:
+      "Build a high-income freelancing business — mindset, high-income skill mapping, service packaging, client acquisition, proposals, pricing, delivery, recurring revenue, and scaling to an agency.",
+    chapters: 17,
+    files: 204,
+    gradient: "from-amber-400 to-orange-600",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 8.25h16.5v10.5H3.75V8.25zM8.25 8.25V6A1.5 1.5 0 019.75 4.5h4.5A1.5 1.5 0 0115.75 6v2.25M12 11.25v5.25M14.25 13.5c0-1.07-.93-1.75-2.25-1.75S9.75 12.43 9.75 13.5s.93 1.5 2.25 1.75 2.25.68 2.25 1.75-.93 1.75-2.25 1.75-2.25-.68-2.25-1.75" />
+      </svg>
+    ),
+  },
 ];
 
 export function getBookConfig(bookId: string): BookInfo | undefined {
