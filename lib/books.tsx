@@ -164,6 +164,24 @@ export const BOOKS: BookInfo[] = [
       </svg>
     ),
   },
+  {
+    id: "gate-ece",
+    name: "GATE ECE Analog Circuits",
+    owner: "aayush598",
+    repo: "learn-techstacks",
+    branch: "main",
+    path: "gate/ece/analog_circuit",
+    description:
+      "Complete GATE EC analog circuits syllabus in one place — diodes, clipping, clamping, rectifiers, BJT and MOSFET stages, op-amps, filters, feedback, oscillators, plus 27 practice sets.",
+    chapters: 35,
+    files: 61,
+    gradient: "from-lime-400 to-green-600",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M9 3.75h6M7.5 3.75h9a1.5 1.5 0 011.5 1.5v15a1.5 1.5 0 01-1.5 1.5h-9a1.5 1.5 0 01-1.5-1.5v-15a1.5 1.5 0 011.5-1.5z" />
+      </svg>
+    ),
+  },
 ];
 
 export function getBookConfig(bookId: string): BookInfo | undefined {
