@@ -17,6 +17,7 @@ import ChapterDivider from "@/components/chapter-divider";
 import Flashcards from "@/components/flashcards";
 import ProblemsView from "@/components/problems-view";
 import TopicTracker from "@/components/topic-tracker";
+import SheetProgressPanel from "@/components/sheet-progress-panel";
 import TTSControls from "@/components/tts-controls";
 import { useTTS } from "@/lib/use-tts";
 import { splitBlocks, ttsText, isHeadingBlock, isCodeBlock } from "@/lib/tts";
@@ -58,6 +59,7 @@ export default function BookPage() {
   const [bookLoading, setBookLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sheetPanelOpen, setSheetPanelOpen] = useState(false);
 
   const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
   const [anchorFile, setAnchorFile] = useState<string | null>(null);
@@ -302,6 +304,10 @@ export default function BookPage() {
   const currentIdx = anchorFile ? allFiles.findIndex((f) => f.path === anchorFile) : -1;
 
   const bookmarkActive = bookId && anchorFile ? isBookmarked(bookId, anchorFile) : false;
+  const currentSheet = useMemo(
+    () => loadedFiles.find((f) => f.path === anchorFile) || null,
+    [loadedFiles, anchorFile]
+  );
   const [flashcardMode, setFlashcardMode] = useState(false);
   const [flashcardInitialView, setFlashcardInitialView] = useState<"cards" | "dashboard">("cards");
   const [problemsMode, setProblemsMode] = useState(false);
@@ -592,6 +598,23 @@ export default function BookPage() {
               </svg>
             </button>
 
+            {/* Sheet progress panel — track questions covered in this sheet */}
+            <button
+              onClick={() => setSheetPanelOpen(!sheetPanelOpen)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{
+                color: sheetPanelOpen ? "var(--accent)" : "var(--text-tertiary)",
+                background: sheetPanelOpen ? "var(--accent-bg)" : "transparent",
+              }}
+              onMouseEnter={(e) => !sheetPanelOpen && (e.currentTarget.style.background = "var(--bg-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              title="Sheet progress — tick off questions in this sheet"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M9 3.75h6m-3-1.5h-3a1.5 1.5 0 00-1.5 1.5v16.5a1.5 1.5 0 001.5 1.5h3a1.5 1.5 0 001.5-1.5V5.25a1.5 1.5 0 00-1.5-1.5z" />
+              </svg>
+            </button>
+
             {/* Coding problems browser */}
             <button
               onClick={() => { setProblemsMode(!problemsMode); setFlashcardMode(false); }}
@@ -733,6 +756,7 @@ export default function BookPage() {
         />
       </div>
 
+      <div className="flex min-w-0 flex-1">
       <div className="flex flex-1 flex-col min-w-0">
         {flashcardMode ? (
           <Flashcards
@@ -916,6 +940,27 @@ export default function BookPage() {
             </AnalyseCtx.Provider>
           </main>
         )}
+      </div>
+
+      {sheetPanelOpen && !flashcardMode && !problemsMode && currentSheet && (
+        <>
+          <button
+            type="button"
+            aria-label="Close sheet progress"
+            onClick={() => setSheetPanelOpen(false)}
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          />
+          <div className="max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-[min(22rem,92vw)] lg:flex lg:shrink-0">
+            <SheetProgressPanel
+              bookId={bookId || ""}
+              filePath={currentSheet.path}
+              sheetTitle={normalizeName(currentSheet.path.split("/").pop() || "")}
+              markdown={currentSheet.content}
+              onClose={() => setSheetPanelOpen(false)}
+            />
+          </div>
+        </>
+      )}
       </div>
 
       {topicTrackerOpen && (

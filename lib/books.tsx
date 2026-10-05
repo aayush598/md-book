@@ -170,11 +170,11 @@ export const BOOKS: BookInfo[] = [
     owner: "aayush598",
     repo: "learn-techstacks",
     branch: "main",
-    path: "gate/ece/analog_circuit",
+    path: "gate/ece",
     description:
-      "Complete GATE EC analog circuits syllabus in one place — diodes, clipping, clamping, rectifiers, BJT and MOSFET stages, op-amps, filters, feedback, oscillators, plus 27 practice sets.",
-    chapters: 35,
-    files: 61,
+      "GATE ECE question bank — 16 subject folders (engineering mathematics, aptitude, circuit theory, signals, analog, digital, machines, power, control, communication, EM, VLSI, instrumentation, solid-state) with full solutions per question.",
+    chapters: 16,
+    files: 11,
     gradient: "from-lime-400 to-green-600",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
