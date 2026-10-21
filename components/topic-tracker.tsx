@@ -11,7 +11,7 @@ import {
 } from "@/lib/topic-tracker";
 
 /** Derive a suggested topic name from the currently open file path, e.g.
- *  "samora-ai/Agent2UI/README.md" → "Agent2UI" (the file's parent folder). */
+ *  "Top100/Agent2UI/README.md" → "Agent2UI" (the file's parent folder). */
 export function topicNameFromFile(filePath?: string | null): string {
   if (!filePath) return "";
   const parts = filePath.split("/").filter(Boolean);

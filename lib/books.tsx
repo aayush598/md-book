@@ -28,12 +28,12 @@ export type BookCard = Pick<
 
 export const BOOKS: BookInfo[] = [
   {
-    id: "samora-ai",
-    name: "Samora AI",
+    id: "Top100",
+    name: "Top 100",
     owner: "aayush598",
     repo: "learn-techstacks",
     branch: "main",
-    path: "samora-ai",
+    path: "Top100",
     description: "Comprehensive interview questions covering AI agents, LangChain, RAG, vector databases, and modern ML stacks.",
     chapters: 60,
     files: 115,

@@ -176,7 +176,7 @@ export default function BookPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once bootstrap guarded by loadedRef
   }, [config?.id]);
 
-  // Make every open tab show which ebook it holds, e.g. "mdbooks - Samora AI".
+  // Make every open tab show which ebook it holds, e.g. "mdbooks - Top 100".
   useEffect(() => {
     if (book) document.title = `mdbooks - ${book.name}`;
   }, [book]);
